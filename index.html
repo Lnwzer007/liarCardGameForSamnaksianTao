@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Liar's Cards — Ship of Deceit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="sea-bg"><div class="waves"></div></div>
+
+<!-- ================= SCREEN: HOME ================= -->
+<section id="screen-home" class="screen active">
+  <div class="wheel-mark" aria-hidden="true">☠</div>
+  <h1 class="brand">Liar's Cards<span class="brand-sub">Ship of Deceit</span></h1>
+  <p class="tagline">บลัฟให้เนียน นับให้แม่น ใครโป้ต้องเดินไม้กระดาน</p>
+
+  <div class="panel home-panel">
+    <label class="field">
+      <span>ชื่อกัปตัน (ชื่อผู้เล่น)</span>
+      <input id="input-name" type="text" maxlength="16" placeholder="เช่น กัปตันหมี" autocomplete="off">
+    </label>
+
+    <div class="home-actions">
+      <button id="btn-create" class="btn btn-brass">⚓ สร้างเรือใหม่</button>
+      <div class="divider"><span>หรือ</span></div>
+      <label class="field">
+        <span>รหัสเรือ (6 ตัวอักษร)</span>
+        <input id="input-code" type="text" maxlength="6" placeholder="ABCXYZ" autocomplete="off" style="text-transform:uppercase">
+      </label>
+      <button id="btn-join" class="btn btn-teal">🚩 ขึ้นเรือ</button>
+    </div>
+    <p id="home-error" class="error-text"></p>
+  </div>
+
+  <details class="setup-help">
+    <summary>ตั้งค่า Firebase ก่อนใช้งาน (ทำครั้งเดียว)</summary>
+    <p>เปิดไฟล์ <code>firebase-config.js</code> แล้ววาง config จาก Firebase Console ของคุณ ดูขั้นตอนละเอียดใน <code>README.md</code></p>
+  </details>
+</section>
+
+<!-- ================= SCREEN: LOBBY ================= -->
+<section id="screen-lobby" class="screen">
+  <div class="panel lobby-panel">
+    <div class="lobby-head">
+      <div>
+        <p class="eyebrow">รหัสเรือ</p>
+        <h2 id="lobby-code" class="room-code">------</h2>
+      </div>
+      <button id="btn-copy-code" class="btn btn-ghost btn-sm">คัดลอก</button>
+    </div>
+
+    <ul id="lobby-players" class="player-manifest"></ul>
+
+    <div class="lobby-controls">
+      <label class="field field-inline" id="lives-setting">
+        <span>จำนวนชีวิตเริ่มต้น</span>
+        <select id="input-lives">
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="4">4</option>
+        </select>
+      </label>
+      <button id="btn-start" class="btn btn-brass" disabled>เริ่มออกเรือ (ต้องมี ≥ 2 คน)</button>
+      <p id="lobby-wait" class="muted">รอกัปตันเรือ (host) กดเริ่มเกม...</p>
+    </div>
+    <button id="btn-leave-lobby" class="btn btn-ghost btn-sm">ออกจากเรือ</button>
+  </div>
+</section>
+
+<!-- ================= SCREEN: GAME TABLE ================= -->
+<section id="screen-game" class="screen">
+  <header class="table-topbar">
+    <div class="topbar-item"><span class="eyebrow">เรือ</span><strong id="hud-code">------</strong></div>
+    <div class="topbar-item"><span class="eyebrow">รอบที่</span><strong id="hud-round">1</strong></div>
+    <div class="topbar-item"><span class="eyebrow">ไพ่ในวง</span><strong id="hud-total-cards">0</strong></div>
+    <button id="btn-leave-game" class="btn btn-ghost btn-sm">ออก</button>
+  </header>
+
+  <div class="table-layout">
+    <aside class="manifest-rail">
+      <h3 class="rail-title">ลูกเรือ</h3>
+      <ul id="game-players" class="player-manifest compact"></ul>
+    </aside>
+
+    <main class="table-main">
+      <div class="bid-stage">
+        <p class="eyebrow">คำกล่าวอ้างล่าสุด</p>
+        <div id="current-bid" class="current-bid">ยังไม่มีใครกล่าวอ้าง</div>
+        <p id="turn-indicator" class="turn-indicator"></p>
+      </div>
+
+      <div id="challenge-reveal" class="reveal-box hidden">
+        <p class="eyebrow">เปิดไพ่พิสูจน์!</p>
+        <div id="reveal-list" class="reveal-list"></div>
+        <p id="reveal-result" class="reveal-result"></p>
+      </div>
+
+      <div class="hand-area">
+        <p class="eyebrow">ไพ่ในมือของคุณ</p>
+        <div id="my-hand" class="my-hand"></div>
+      </div>
+
+      <div id="action-panel" class="action-panel">
+        <div class="bid-picker">
+          <label class="field-inline">
+            <span>อันดับ</span>
+            <select id="bid-rank"></select>
+          </label>
+          <label class="field-inline">
+            <span>จำนวน</span>
+            <select id="bid-count"></select>
+          </label>
+          <button id="btn-bid" class="btn btn-brass">กล่าวอ้าง</button>
+        </div>
+        <button id="btn-liar" class="btn btn-rust" disabled>🏴‍☠️ โป้!! (Liar)</button>
+      </div>
+
+      <div class="log-wrap">
+        <p class="eyebrow">สมุดบันทึกเรือ</p>
+        <ul id="game-log" class="game-log"></ul>
+      </div>
+    </main>
+  </div>
+</section>
+
+<!-- ================= SCREEN: GAME OVER ================= -->
+<section id="screen-over" class="screen">
+  <div class="panel over-panel">
+    <div class="wheel-mark" aria-hidden="true">🏆</div>
+    <h2>เกมจบแล้ว</h2>
+    <p id="over-text" class="over-text"></p>
+    <button id="btn-play-again" class="btn btn-brass">กลับหน้าแรก</button>
+  </div>
+</section>
+
+<div id="toast" class="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
