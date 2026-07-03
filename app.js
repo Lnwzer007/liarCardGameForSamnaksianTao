@@ -4,20 +4,16 @@
    ========================================================================== */
 
 const RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
-const HAND_SIZE = 8;
+const HAND_SIZE = 5;
 const MAX_PLAYERS = 10;
 const REVEAL_PAUSE_MS = 3800;
 
 const JOKER = 'JOKER';       // ไพ่โจ๊กเกอร์ — เป็นไพ่อันดับไหนก็ได้ ตรงกับไพ่ส่วนกลางเสมอ
-const SET_SIZE = 3;          // แต่ละ "ชุดไพ่" ที่ใช้เล่นในหนึ่งรอบใหญ่ มีกี่อันดับ (เหมือนเกม Liar's Bar ที่ใช้ Q/K/A)
-// ชุดไพ่ทั้งหมดที่กำหนดไว้ล่วงหน้า — สร้างจากอันดับที่เรียงติดกันในสำรับ (2,3,4 / 3,4,5 / ... / J,Q,A) เป็นชุดๆ
-const CARD_SETS = (() => {
-  const sets = [];
-  for (let i = 0; i + SET_SIZE <= RANKS.length; i++){
-    sets.push(Array.from({ length: SET_SIZE }, (_, k) => i + k)); // เก็บเป็น index ของ RANKS
-  }
-  return sets;
-})();
+const ACTIVE_RANKS = ['J','Q','K'].map(r => RANKS.indexOf(r)); // ไพ่ที่ใช้เล่นจริงมีแค่ J, Q, K
+const RANK_COUNT_PER_RANK = 6;   // แต่ละอันดับ (J/Q/K) มีอย่างละ 6 ใบ
+const JOKER_COUNT = 2;           // โจ๊กเกอร์ 2 ใบ
+const DECK_SIZE = ACTIVE_RANKS.length * RANK_COUNT_PER_RANK + JOKER_COUNT; // = 20 ใบ ตายตัว ไม่ขยายตามจำนวนคน
+const MAX_STARTABLE_PLAYERS = Math.floor(DECK_SIZE / HAND_SIZE);           // ไพ่พอแจกคนละ 5 ใบได้กี่คน
 
 const db = firebase.database();
 const auth = firebase.auth();
@@ -176,8 +172,11 @@ function renderLobby(room){
     list.appendChild(li);
   });
   const count = Object.keys(players).length;
-  $('btn-start').disabled = !(isHost && count >= 2);
-  $('btn-start').textContent = isHost ? 'เริ่มเกม' : 'เริ่มเกม (ต้องมี ≥ 2 คน)';
+  const tooMany = count > MAX_STARTABLE_PLAYERS;
+  $('btn-start').disabled = !(isHost && count >= 2 && !tooMany);
+  $('btn-start').textContent = isHost
+    ? (tooMany ? `ผู้เล่นเกิน (สูงสุด ${MAX_STARTABLE_PLAYERS} คน)` : 'เริ่มเกม')
+    : `เริ่มเกม (ต้องมี 2-${MAX_STARTABLE_PLAYERS} คน)`;
   $('lives-setting').style.display = isHost ? 'flex' : 'none';
   $('input-lives').value = room.startingLives || 3;
   $('lobby-wait').style.display = isHost ? 'none' : 'block';
@@ -196,10 +195,14 @@ $('btn-start').addEventListener('click', async () => {
   const players = snap.val() || {};
   const uids = Object.keys(players);
   if (uids.length < 2) return;
+  if (uids.length > MAX_STARTABLE_PLAYERS){
+    toast(`ไพ่ไม่พอ! สำรับมี ${DECK_SIZE} ใบ (คนละ ${HAND_SIZE} ใบ) เล่นได้สูงสุด ${MAX_STARTABLE_PLAYERS} คน`);
+    return;
+  }
   const lives = roomCache.startingLives || 3;
   shuffle(uids);
 
-  const { hands, drawPile, centerRank, total, setIndex, order, pos, setRanks } = dealNewRound(uids);
+  const { hands, drawPile, centerRank, total, order, pos } = dealNewRound(uids);
   const updates = {};
   updates[`rooms/${roomCode}/status`] = 'playing';
   updates[`rooms/${roomCode}/round`] = 1;
@@ -207,7 +210,6 @@ $('btn-start').addEventListener('click', async () => {
   updates[`rooms/${roomCode}/currentTurnIndex`] = 0;
   updates[`rooms/${roomCode}/centerRank`] = centerRank;
   updates[`rooms/${roomCode}/centerRankTotal`] = total;
-  updates[`rooms/${roomCode}/cardSetIndex`] = setIndex;
   updates[`rooms/${roomCode}/cycleOrder`] = order;
   updates[`rooms/${roomCode}/cyclePos`] = pos;
   updates[`rooms/${roomCode}/pile`] = null;
@@ -218,7 +220,7 @@ $('btn-start').addEventListener('click', async () => {
   updates[`rooms/${roomCode}/hasDrawnThisTurn`] = false;
   uids.forEach(uid => { updates[`rooms/${roomCode}/players/${uid}/lives`] = lives; updates[`rooms/${roomCode}/players/${uid}/alive`] = true; });
   updates[`rooms/${roomCode}/hands`] = hands;
-  updates[`rooms/${roomCode}/log`] = { [Date.now()]: { text: `🎮 เกมเริ่ม! ชุดไพ่รอบนี้: ${setRanks.map(r=>RANKS[r]).join(', ')} + 🃏 โจ๊กเกอร์ · แจกคนละ ${HAND_SIZE} ใบ เหลือ ${drawPile.length} ใบในกองจั่ว`, type:'info', ts: Date.now() } };
+  updates[`rooms/${roomCode}/log`] = { [Date.now()]: { text: `🎮 เกมเริ่ม! สำรับ J/Q/K อย่างละ ${RANK_COUNT_PER_RANK} + 🃏 โจ๊กเกอร์ ${JOKER_COUNT} (รวม ${DECK_SIZE} ใบ) · แจกคนละ ${HAND_SIZE} ใบ เหลือ ${drawPile.length} ใบในกองจั่ว`, type:'info', ts: Date.now() } };
 
   await db.ref().update(updates);
 });
@@ -275,10 +277,14 @@ async function restartGame(uids){
   const snap = await db.ref('rooms/' + roomCode).get();
   const room = snap.val();
   if (!room || room.status !== 'ended') return; // กันไม่ให้รันซ้ำ
+  if (uids.length > MAX_STARTABLE_PLAYERS){
+    toast(`ไพ่ไม่พอสำหรับผู้เล่นเกิน ${MAX_STARTABLE_PLAYERS} คน เริ่มเกมใหม่ไม่ได้`);
+    return;
+  }
 
   const lives = room.startingLives || 3;
   shuffle(uids);
-  const { hands, drawPile, centerRank, total, setIndex, order, pos, setRanks } = dealNewRound(uids);
+  const { hands, drawPile, centerRank, total, order, pos } = dealNewRound(uids);
 
   const updates = {};
   updates[`rooms/${roomCode}/status`] = 'playing';
@@ -287,7 +293,6 @@ async function restartGame(uids){
   updates[`rooms/${roomCode}/currentTurnIndex`] = 0;
   updates[`rooms/${roomCode}/centerRank`] = centerRank;
   updates[`rooms/${roomCode}/centerRankTotal`] = total;
-  updates[`rooms/${roomCode}/cardSetIndex`] = setIndex;
   updates[`rooms/${roomCode}/cycleOrder`] = order;
   updates[`rooms/${roomCode}/cyclePos`] = pos;
   updates[`rooms/${roomCode}/pile`] = null;
@@ -300,7 +305,7 @@ async function restartGame(uids){
   updates[`rooms/${roomCode}/hasDrawnThisTurn`] = false;
   uids.forEach(uid => { updates[`rooms/${roomCode}/players/${uid}/lives`] = lives; updates[`rooms/${roomCode}/players/${uid}/alive`] = true; });
   updates[`rooms/${roomCode}/hands`] = hands;
-  updates[`rooms/${roomCode}/log`] = { [Date.now()]: { text: `🔄 เริ่มเกมใหม่! ชุดไพ่รอบนี้: ${setRanks.map(r=>RANKS[r]).join(', ')} + 🃏 โจ๊กเกอร์ · แจกคนละ ${HAND_SIZE} ใบ เหลือ ${drawPile.length} ใบในกองจั่ว`, type:'info', ts: Date.now() } };
+  updates[`rooms/${roomCode}/log`] = { [Date.now()]: { text: `🔄 เริ่มเกมใหม่! สำรับ J/Q/K อย่างละ ${RANK_COUNT_PER_RANK} + 🃏 โจ๊กเกอร์ ${JOKER_COUNT} (รวม ${DECK_SIZE} ใบ) · แจกคนละ ${HAND_SIZE} ใบ เหลือ ${drawPile.length} ใบในกองจั่ว`, type:'info', ts: Date.now() } };
 
   await db.ref().update(updates);
 }
@@ -321,12 +326,11 @@ function goHome(){
 
 /* ------------------------------- DEALING ------------------------------- */
 
-function dealHands(uids, activeRanks){
-  const n = uids.length;
+// สำรับตายตัว: J/Q/K อย่างละ 6 ใบ + โจ๊กเกอร์ 2 ใบ = 20 ใบ ไม่ขยายตามจำนวนผู้เล่น
+function dealHands(uids){
   const pool = [];
-  activeRanks.forEach(rankIdx => { for (let k=0; k<n*4; k++) pool.push(rankIdx); }); // ชุดไพ่มีแค่ไม่กี่อันดับ เลยใส่สำเนาต่ออันดับให้เยอะขึ้น
-  const jokerCount = Math.max(2, Math.ceil(n/2));
-  for (let k=0; k<jokerCount; k++) pool.push(JOKER); // แถมโจ๊กเกอร์ เป็นไพ่อันดับไหนก็ได้
+  ACTIVE_RANKS.forEach(rankIdx => { for (let k=0; k<RANK_COUNT_PER_RANK; k++) pool.push(rankIdx); });
+  for (let k=0; k<JOKER_COUNT; k++) pool.push(JOKER);
   shuffle(pool);
   const hands = {};
   let cursor = 0;
@@ -335,21 +339,17 @@ function dealHands(uids, activeRanks){
   return { hands, drawPile };
 }
 
-// หมุนไพ่ส่วนกลางไปทีละอันดับภายใน "ชุด" เดิม พอครบทุกอันดับในชุดแล้ว (ครบรอบ) ค่อยสลับไปชุดอื่นที่ตั้งไว้ล่วงหน้า
-function advanceCycle(prevSetIndex, prevOrder, prevPos){
-  let setIndex = prevSetIndex, order = prevOrder, pos = prevPos;
-  const needNewSet = setIndex === undefined || order === undefined || pos === undefined || pos + 1 >= order.length;
-  if (needNewSet){
-    let nextIndex;
-    do { nextIndex = Math.floor(Math.random() * CARD_SETS.length); }
-    while (CARD_SETS.length > 1 && nextIndex === setIndex);
-    setIndex = nextIndex;
-    order = shuffle([...CARD_SETS[setIndex]]);
+// หมุนไพ่ส่วนกลางไปทีละอันดับใน J/Q/K พอครบทุกอันดับแล้ว (ครบรอบ) ค่อยสุ่มลำดับใหม่แล้ววนต่อ
+function advanceCycle(prevOrder, prevPos){
+  let order = prevOrder, pos = prevPos;
+  const needNewOrder = order === undefined || pos === undefined || pos + 1 >= order.length;
+  if (needNewOrder){
+    order = shuffle([...ACTIVE_RANKS]);
     pos = 0;
   } else {
     pos = pos + 1;
   }
-  return { setIndex, order, pos, centerRank: order[pos] };
+  return { order, pos, centerRank: order[pos] };
 }
 
 // นับว่าทั้ง "มือทุกคน + กองจั่ว" รวมกันมีไพ่ที่ถือว่า "ตรง" กับไพ่ส่วนกลางกี่ใบ (นับโจ๊กเกอร์รวมด้วย เพราะตรงเสมอ)
@@ -360,13 +360,12 @@ function computeCenterTotal(hands, drawPile, centerRank){
   return total;
 }
 
-// รวมทุกอย่างของการเริ่มรอบใหม่ไว้ที่เดียว: หมุนไปไพ่ชุด/อันดับถัดไป แล้วแจกไพ่จากชุดนั้น (+โจ๊กเกอร์) ให้ผู้เล่นที่เหลือ
-function dealNewRound(uids, prevSetIndex, prevOrder, prevPos){
-  const { setIndex, order, pos, centerRank } = advanceCycle(prevSetIndex, prevOrder, prevPos);
-  const setRanks = CARD_SETS[setIndex];
-  const { hands, drawPile } = dealHands(uids, setRanks);
+// รวมทุกอย่างของการเริ่มรอบใหม่ไว้ที่เดียว: หมุนไปไพ่อันดับถัดไป แล้วแจกไพ่จากสำรับตายตัว (+โจ๊กเกอร์) ให้ผู้เล่นที่เหลือ
+function dealNewRound(uids, prevOrder, prevPos){
+  const { order, pos, centerRank } = advanceCycle(prevOrder, prevPos);
+  const { hands, drawPile } = dealHands(uids);
   const total = computeCenterTotal(hands, drawPile, centerRank);
-  return { hands, drawPile, centerRank, total, setIndex, order, pos, setRanks };
+  return { hands, drawPile, centerRank, total, order, pos };
 }
 
 // หาว่าตาถัดไปควรเป็นใคร โดยข้าม "คนที่เพิ่งโดนยิง" ไปเลย ให้เริ่มที่คนถัดไปจากเขาแทน
@@ -403,13 +402,9 @@ function renderGame(room){
 
   // center card + pile
   $('center-card').textContent = room.centerRank !== undefined ? RANKS[room.centerRank] : '?';
-  $('center-total').textContent = room.centerRankTotal !== undefined
-    ? `รวมทั้งเกม (มือทุกคน + กองจั่ว) มีไพ่ที่นับว่าตรง ${room.centerRankTotal} ใบ (รวมโจ๊กเกอร์)`
-    : '';
-  const setRanks = room.cardSetIndex !== undefined ? CARD_SETS[room.cardSetIndex] : null;
-  $('active-set-info').textContent = setRanks
-    ? `ชุดไพ่รอบนี้: ${setRanks.map(r => RANKS[r]).join(', ')} + 🃏 โจ๊กเกอร์ (มือ/กองจั่วมีแค่ไพ่พวกนี้)`
-    : '';
+  $('center-total').textContent = ''; // ไม่บอกจำนวนไพ่ที่ตรงระหว่างเล่น จะบอกก็ต่อเมื่อเปิดไพ่พิสูจน์เท่านั้น (ดู renderReveal)
+  $('active-set-info').textContent =
+    `สำรับ: ${ACTIVE_RANKS.map(r => RANKS[r]).join(', ')} อย่างละ ${RANK_COUNT_PER_RANK} ใบ + 🃏 โจ๊กเกอร์ ${JOKER_COUNT} ใบ (รวม ${DECK_SIZE} ใบ)`;
   const pile = room.pile;
   $('pile-info').textContent = pile ? `${pile.ownerName} เล่นไปแล้ว ${pile.count} ใบ (ปิดหน้า)` : 'ยังไม่มีใครเล่นไพ่ในรอบนี้';
 
@@ -442,6 +437,7 @@ function renderGame(room){
   if (showActions){
     $('btn-liar').disabled = !myTurn || !pile;
     $('btn-draw').disabled = !myTurn || !!room.hasDrawnThisTurn || drawPile.length === 0;
+    $('btn-skip').disabled = !myTurn;
     updatePlayButtonState();
   }
 
@@ -460,6 +456,9 @@ function renderReveal(room){
     list.appendChild(div);
   });
   $('reveal-result').textContent = ch.resultText || '';
+  $('center-total').textContent = room.centerRankTotal !== undefined
+    ? `ตอนแจกไพ่รอบนี้ ทั้งเกม (มือทุกคน + กองจั่ว) มีไพ่ที่นับว่าตรงกับ ${RANKS[room.centerRank]} อยู่ ${room.centerRankTotal} ใบ (รวมโจ๊กเกอร์)`
+    : '';
 }
 
 function renderMyHand(){
@@ -522,6 +521,10 @@ $('btn-liar').addEventListener('click', () => {
 
 $('btn-draw').addEventListener('click', () => {
   db.ref(`rooms/${roomCode}/pendingAction`).set({ type:'draw', uid: myUid, ts: Date.now() });
+});
+
+$('btn-skip').addEventListener('click', () => {
+  db.ref(`rooms/${roomCode}/pendingAction`).set({ type:'skip', uid: myUid, ts: Date.now() });
 });
 
 /* ------------------------------ HOST REFEREE LOGIC ------------------------------ */
@@ -593,6 +596,19 @@ async function processPendingAction(action){
     await db.ref().update(updates);
   }
 
+  // ข้ามตา: แค่ส่งตาต่อให้คนถัดไป ไม่แตะไพ่ส่วนกลาง / กองไพ่ล่าสุด / กองจั่วเลย
+  if (action.type === 'skip'){
+    const p = room.players[action.uid];
+    const nextIndex = nextAliveIndex(order, room.currentTurnIndex, room.players);
+
+    const updates = {};
+    updates[`rooms/${roomCode}/currentTurnIndex`] = nextIndex;
+    updates[`rooms/${roomCode}/pendingAction`] = null;
+    updates[`rooms/${roomCode}/hasDrawnThisTurn`] = false; // ตาถัดไป จั่วได้ใหม่อีกครั้ง
+    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `${p.name} ข้ามตา (ไพ่ส่วนกลางเหมือนเดิม)`, type:'info', ts: Date.now() };
+    await db.ref().update(updates);
+  }
+
   if (action.type === 'liar'){
     const pile = room.pile;
     if (!pile){ db.ref(`rooms/${roomCode}/pendingAction`).remove(); return; }
@@ -640,8 +656,8 @@ async function finishRound(loserUid, eliminated){
     updates[`rooms/${roomCode}/winnerUid`] = aliveUids[0] || null;
     updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `🏆 ${aliveUids[0] ? room.players[aliveUids[0]].name : 'ไม่มีใคร'} คือผู้รอดชีวิตคนสุดท้าย!`, type:'win', ts: Date.now() };
   } else {
-    const { hands, drawPile, centerRank, total, setIndex, order: cycleOrder, pos, setRanks } =
-      dealNewRound(aliveUids, room.cardSetIndex, room.cycleOrder, room.cyclePos);
+    const { hands, drawPile, centerRank, total, order: cycleOrder, pos } =
+      dealNewRound(aliveUids, room.cycleOrder, room.cyclePos);
     const nextIdx = findNextStarter(order, aliveUids, loserUid);
     updates[`rooms/${roomCode}/status`] = 'playing';
     updates[`rooms/${roomCode}/round`] = (room.round || 1) + 1;
@@ -649,7 +665,6 @@ async function finishRound(loserUid, eliminated){
     updates[`rooms/${roomCode}/currentTurnIndex`] = nextIdx;
     updates[`rooms/${roomCode}/centerRank`] = centerRank;
     updates[`rooms/${roomCode}/centerRankTotal`] = total;
-    updates[`rooms/${roomCode}/cardSetIndex`] = setIndex;
     updates[`rooms/${roomCode}/cycleOrder`] = cycleOrder;
     updates[`rooms/${roomCode}/cyclePos`] = pos;
     updates[`rooms/${roomCode}/pile`] = null;
@@ -658,10 +673,6 @@ async function finishRound(loserUid, eliminated){
     updates[`rooms/${roomCode}/hands`] = hands;
     updates[`rooms/${roomCode}/drawPile`] = drawPile;
     updates[`rooms/${roomCode}/hasDrawnThisTurn`] = false;
-    const isNewSet = setIndex !== room.cardSetIndex;
-    if (isNewSet){
-      updates[`rooms/${roomCode}/log/${Date.now()+1}`] = { text: `🔀 หมุนครบชุดเดิมแล้ว เปลี่ยนไปชุดไพ่ใหม่: ${setRanks.map(r=>RANKS[r]).join(', ')} + 🃏`, type:'info', ts: Date.now()+1 };
-    }
   }
   await db.ref().update(updates);
 }
