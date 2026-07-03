@@ -1,11 +1,12 @@
 /* ==========================================================================
-   Liar's Cards — Ship of Deceit
-   Vanilla JS + Firebase Realtime Database (no build step, GitHub Pages ready)
+   ไพ่โป้ (Liar's Cards) — เล่นไพ่ให้ตรงไพ่ส่วนกลาง หรือกล้าโป้เพื่อน
+   Vanilla JS + Firebase Realtime Database
    ========================================================================== */
 
 const RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
 const HAND_SIZE = 5;
 const MAX_PLAYERS = 10;
+const REVEAL_PAUSE_MS = 3800;
 
 const db = firebase.database();
 const auth = firebase.auth();
@@ -16,8 +17,10 @@ let roomCode = null;
 let isHost = false;
 let roomCache = null;
 let handsCache = null;
+let selectedIdx = [];         // indexes selected in my hand for the next play
 let roomListener = null;
 let handListener = null;
+let pendingWatchAttached = false;
 
 /* ---------------------------- small utilities ---------------------------- */
 
@@ -46,86 +49,63 @@ function shuffle(arr){
   }
   return arr;
 }
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
 
 /* ------------------------------- auth boot ------------------------------- */
 
-auth.onAuthStateChanged(user => {
-  if (user){
-    myUid = user.uid;
-  } else {
-    auth.signInAnonymously().catch(err => {
-      toast('เชื่อมต่อ Firebase ไม่สำเร็จ: ' + err.message);
-      console.error(err);
-    });
-  }
-});
+auth.onAuthStateChanged(user => { if (user) myUid = user.uid; else {
+  auth.signInAnonymously().catch(err => { toast('เชื่อมต่อ Firebase ไม่สำเร็จ: ' + err.message); console.error(err); });
+}});
+function waitForAuth(){
+  return new Promise(resolve => { const unsub = auth.onAuthStateChanged(u => { if (u){ unsub(); resolve(); } }); });
+}
 
 /* ============================== HOME SCREEN ============================== */
 
 $('btn-create').addEventListener('click', async () => {
   myName = $('input-name').value.trim();
-  if (!myName){ $('home-error').textContent = 'กรุณาใส่ชื่อกัปตันก่อนนะ'; return; }
+  if (!myName){ $('home-error').textContent = 'กรุณาใส่ชื่อก่อนนะ'; return; }
   if (!myUid) await waitForAuth();
 
   const code = randCode();
-  const roomRef = db.ref('rooms/' + code);
   const now = Date.now();
-
   try {
-    await roomRef.set({
-      hostUid: myUid,
-      status: 'lobby',
-      startingLives: 3,
-      round: 0,
-      createdAt: now
-    });
-    await db.ref(`rooms/${code}/players/${myUid}`).set({
-      name: myName, lives: 3, alive: true, connected: true, joinedAt: now
-    });
+    await db.ref('rooms/' + code).set({ hostUid: myUid, status: 'lobby', startingLives: 3, round: 0, createdAt: now });
+    await db.ref(`rooms/${code}/players/${myUid}`).set({ name: myName, lives: 3, alive: true, connected: true, joinedAt: now });
     db.ref(`rooms/${code}/players/${myUid}/connected`).onDisconnect().set(false);
     enterRoom(code, true);
   } catch (err){
-    $('home-error').textContent = 'สร้างเรือไม่สำเร็จ: ' + err.message;
-    console.error(err);
+    $('home-error').textContent = 'สร้างห้องไม่สำเร็จ: ' + err.message; console.error(err);
   }
 });
 
 $('btn-join').addEventListener('click', async () => {
   myName = $('input-name').value.trim();
   const code = $('input-code').value.trim().toUpperCase();
-  if (!myName){ $('home-error').textContent = 'กรุณาใส่ชื่อกัปตันก่อนนะ'; return; }
-  if (!code){ $('home-error').textContent = 'กรุณาใส่รหัสเรือ'; return; }
+  if (!myName){ $('home-error').textContent = 'กรุณาใส่ชื่อก่อนนะ'; return; }
+  if (!code){ $('home-error').textContent = 'กรุณาใส่รหัสห้อง'; return; }
   if (!myUid) await waitForAuth();
 
   const snap = await db.ref('rooms/' + code).get();
-  if (!snap.exists()){ $('home-error').textContent = 'ไม่พบเรือรหัสนี้'; return; }
+  if (!snap.exists()){ $('home-error').textContent = 'ไม่พบห้องรหัสนี้'; return; }
   const room = snap.val();
-  if (room.status !== 'lobby'){ $('home-error').textContent = 'เรือลำนี้ออกเดินทางไปแล้ว'; return; }
+  if (room.status !== 'lobby'){ $('home-error').textContent = 'เกมนี้เริ่มไปแล้ว'; return; }
 
   const playersSnap = await db.ref(`rooms/${code}/players`).get();
   const players = playersSnap.val() || {};
-  if (Object.keys(players).length >= MAX_PLAYERS){
-    $('home-error').textContent = 'เรือเต็มแล้ว (สูงสุด 10 คน)'; return;
-  }
+  if (Object.keys(players).length >= MAX_PLAYERS){ $('home-error').textContent = 'ห้องเต็มแล้ว (สูงสุด 10 คน)'; return; }
 
-  await db.ref(`rooms/${code}/players/${myUid}`).set({
-    name: myName, lives: room.startingLives || 3, alive: true, connected: true, joinedAt: Date.now()
-  });
+  await db.ref(`rooms/${code}/players/${myUid}`).set({ name: myName, lives: room.startingLives || 3, alive: true, connected: true, joinedAt: Date.now() });
   db.ref(`rooms/${code}/players/${myUid}/connected`).onDisconnect().set(false);
   enterRoom(code, room.hostUid === myUid);
 });
 
-function waitForAuth(){
-  return new Promise(resolve => {
-    const unsub = auth.onAuthStateChanged(u => { if (u){ unsub(); resolve(); } });
-  });
-}
-
 /* ================================ ROOM ================================ */
 
 function enterRoom(code, host){
-  roomCode = code;
-  isHost = host;
+  roomCode = code; isHost = host;
   $('lobby-code').textContent = code;
   $('hud-code').textContent = code;
   $('home-error').textContent = '';
@@ -146,10 +126,7 @@ function attachRoomListener(){
 
 function attachHandListener(){
   if (handListener) db.ref(`rooms/${roomCode}/hands/${myUid}`).off('value', handListener);
-  handListener = snap => {
-    handsCache = snap.val() || [];
-    renderMyHand();
-  };
+  handListener = snap => { handsCache = snap.val() || []; renderMyHand(); };
   db.ref(`rooms/${roomCode}/hands/${myUid}`).on('value', handListener);
 }
 
@@ -160,14 +137,12 @@ function onRoomUpdate(room){
     if (!handListener) attachHandListener();
     showScreen('screen-game');
     renderGame(room);
-    if (room.status === 'revealing') handleRevealing(room);
-    else $('challenge-reveal').classList.add('hidden');
-    if (isHost) hostWatchPendingAction(room);
+    if (isHost) hostWatchPendingAction();
   } else if (room.status === 'ended'){
     showScreen('screen-over');
     const winner = room.players ? room.players[room.winnerUid] : null;
     $('over-text').innerHTML = winner
-      ? `👑 ผู้รอดชีวิตคนสุดท้าย: <strong style="color:var(--brass-bright)">${escapeHtml(winner.name)}</strong>`
+      ? `👑 ผู้รอดชีวิตคนสุดท้าย: <strong style="color:var(--primary)">${escapeHtml(winner.name)}</strong>`
       : 'เกมจบแล้ว';
   }
 }
@@ -180,23 +155,21 @@ function renderLobby(room){
   list.innerHTML = '';
   Object.entries(players).forEach(([uid, p]) => {
     const li = document.createElement('li');
-    li.innerHTML = `<span><span class="pm-name">${escapeHtml(p.name)}</span>${uid===room.hostUid?'<span class="pm-host-tag">HOST</span>':''}</span>
+    li.innerHTML = `<span>${escapeHtml(p.name)}${uid===room.hostUid?'<span class="pm-host">HOST</span>':''}</span>
                      <span class="muted">${p.connected===false?'ออฟไลน์':'พร้อม'}</span>`;
     list.appendChild(li);
   });
-
   const count = Object.keys(players).length;
   $('btn-start').disabled = !(isHost && count >= 2);
-  $('btn-start').textContent = isHost ? 'เริ่มออกเรือ' : 'เริ่มออกเรือ (ต้องมี ≥ 2 คน)';
-  $('lives-setting').style.display = isHost ? 'block' : 'none';
+  $('btn-start').textContent = isHost ? 'เริ่มเกม' : 'เริ่มเกม (ต้องมี ≥ 2 คน)';
+  $('lives-setting').style.display = isHost ? 'flex' : 'none';
   $('input-lives').value = room.startingLives || 3;
   $('lobby-wait').style.display = isHost ? 'none' : 'block';
 }
 
 $('btn-copy-code').addEventListener('click', () => {
-  navigator.clipboard.writeText(roomCode).then(() => toast('คัดลอกรหัสเรือแล้ว'));
+  navigator.clipboard.writeText(roomCode).then(() => toast('คัดลอกรหัสห้องแล้ว'));
 });
-
 $('input-lives').addEventListener('change', () => {
   if (isHost && roomCode) db.ref(`rooms/${roomCode}/startingLives`).set(parseInt($('input-lives').value, 10));
 });
@@ -208,22 +181,22 @@ $('btn-start').addEventListener('click', async () => {
   const uids = Object.keys(players);
   if (uids.length < 2) return;
   const lives = roomCache.startingLives || 3;
-
   shuffle(uids);
-  const { hands, totalCards } = dealHands(uids);
 
+  const { hands } = dealHands(uids);
   const updates = {};
   updates[`rooms/${roomCode}/status`] = 'playing';
   updates[`rooms/${roomCode}/round`] = 1;
   updates[`rooms/${roomCode}/turnOrder`] = uids;
   updates[`rooms/${roomCode}/currentTurnIndex`] = 0;
-  updates[`rooms/${roomCode}/currentBid`] = null;
+  updates[`rooms/${roomCode}/centerRank`] = Math.floor(Math.random() * RANKS.length);
+  updates[`rooms/${roomCode}/pile`] = null;
+  updates[`rooms/${roomCode}/secretPile`] = null;
+  updates[`rooms/${roomCode}/challengeReveal`] = null;
   updates[`rooms/${roomCode}/pendingAction`] = null;
-  updates[`rooms/${roomCode}/challenge`] = null;
-  updates[`rooms/${roomCode}/totalCardsInPlay`] = totalCards;
   uids.forEach(uid => { updates[`rooms/${roomCode}/players/${uid}/lives`] = lives; updates[`rooms/${roomCode}/players/${uid}/alive`] = true; });
   updates[`rooms/${roomCode}/hands`] = hands;
-  updates[`rooms/${roomCode}/log`] = { [Date.now()]: { text: `⚓ เรือออกเดินทาง! แจกไพ่คนละ ${HAND_SIZE} ใบ`, type: 'info', ts: Date.now() } };
+  updates[`rooms/${roomCode}/log`] = { [Date.now()]: { text: `🎮 เกมเริ่ม! แจกไพ่คนละ ${HAND_SIZE} ใบ`, type:'info', ts: Date.now() } };
 
   await db.ref().update(updates);
 });
@@ -240,7 +213,8 @@ function goHome(){
   if (roomListener) db.ref('rooms/' + roomCode).off('value', roomListener);
   if (handListener) db.ref(`rooms/${roomCode}/hands/${myUid}`).off('value', handListener);
   roomListener = handListener = null;
-  roomCode = null; isHost = false; roomCache = null; handsCache = null;
+  pendingWatchAttached = false;
+  roomCode = null; isHost = false; roomCache = null; handsCache = null; selectedIdx = [];
   showScreen('screen-home');
 }
 
@@ -253,84 +227,107 @@ function dealHands(uids){
   shuffle(pool);
   const hands = {};
   let cursor = 0;
-  uids.forEach(uid => {
-    hands[uid] = pool.slice(cursor, cursor + HAND_SIZE);
-    cursor += HAND_SIZE;
-  });
-  return { hands, totalCards: n * HAND_SIZE };
+  uids.forEach(uid => { hands[uid] = pool.slice(cursor, cursor + HAND_SIZE); cursor += HAND_SIZE; });
+  return { hands };
 }
 
 /* ------------------------------- GAME UI ------------------------------- */
 
 function renderGame(room){
   $('hud-round').textContent = room.round || 1;
-  $('hud-total-cards').textContent = room.totalCardsInPlay || 0;
 
-  // players rail
   const players = room.players || {};
   const order = room.turnOrder || Object.keys(players);
   const curUid = order[room.currentTurnIndex] || null;
+  const myTurn = curUid === myUid && room.status === 'playing';
+
+  // players rail
   const rail = $('game-players');
   rail.innerHTML = '';
   order.forEach(uid => {
     const p = players[uid]; if (!p) return;
     const li = document.createElement('li');
     li.className = (uid === curUid ? 'pm-turn ' : '') + (!p.alive ? 'pm-dead' : '');
-    li.innerHTML = `<span class="pm-name">${escapeHtml(p.name)}${uid===myUid?' (คุณ)':''}</span><span class="pm-lives">${'♥'.repeat(Math.max(p.lives,0))}</span>`;
+    li.innerHTML = `<span>${escapeHtml(p.name)}${uid===myUid?' (คุณ)':''}</span><span class="pm-lives">${'❤️'.repeat(Math.max(p.lives,0))}</span>`;
     rail.appendChild(li);
   });
 
-  // bid stage
-  const bid = room.currentBid;
-  $('current-bid').textContent = bid ? `${bid.count} × ${RANKS[bid.rank]}` : 'ยังไม่มีใครกล่าวอ้าง';
+  // center card + pile
+  $('center-card').textContent = room.centerRank !== undefined ? RANKS[room.centerRank] : '?';
+  const pile = room.pile;
+  $('pile-info').textContent = pile ? `${pile.ownerName} เล่นไปแล้ว ${pile.count} ใบ (ปิดหน้า)` : 'ยังไม่มีใครเล่นไพ่ในรอบนี้';
+
+  // status banner
   const curPlayer = players[curUid];
-  const myTurn = curUid === myUid && room.status === 'playing';
-  $('turn-indicator').textContent = room.status === 'playing'
-    ? (myTurn ? 'ตาของคุณ!' : `รอ ${curPlayer ? curPlayer.name : '...'} ตัดสินใจ`)
-    : '';
+  $('status-banner').textContent = room.status === 'playing'
+    ? (myTurn ? 'ตาของคุณ! เลือกไพ่ที่จะเล่น หรือกดโป้' : `รอ ${curPlayer ? curPlayer.name : '...'} ตัดสินใจ`)
+    : (room.status === 'revealing' ? 'กำลังเปิดไพ่พิสูจน์...' : '');
+
+  // reveal box
+  if (room.status === 'revealing' && room.challengeReveal){
+    renderReveal(room);
+  } else {
+    $('reveal-box').classList.add('hidden');
+  }
 
   // log
   renderLog(room.log);
 
   // action panel
-  $('action-panel').style.display = room.status === 'playing' ? 'flex' : 'none';
-  if (room.status === 'playing'){
-    populateBidControls(bid, room.totalCardsInPlay || 50);
-    $('btn-bid').disabled = !myTurn;
-    $('btn-liar').disabled = !myTurn || !bid;
+  const showActions = room.status === 'playing';
+  $('action-panel').classList.toggle('hidden', !showActions);
+  if (showActions){
+    $('btn-liar').disabled = !myTurn || !pile;
+    updatePlayButtonState();
   }
 
   renderMyHand();
 }
 
-function populateBidControls(currentBid, maxCount){
-  const rankSel = $('bid-rank'), countSel = $('bid-count');
-  if (rankSel.dataset.built !== '1'){
-    RANKS.forEach((r,i) => { const o = document.createElement('option'); o.value=i; o.textContent=r; rankSel.appendChild(o); });
-    rankSel.dataset.built = '1';
-  }
-  countSel.innerHTML = '';
-  for (let c=1; c<=maxCount; c++){ const o=document.createElement('option'); o.value=c; o.textContent=c; countSel.appendChild(o); }
-
-  if (currentBid){
-    // default to the minimum legal raise
-    let rank = currentBid.rank, count = currentBid.count;
-    if (rank < RANKS.length - 1) rank += 1; else count += 1;
-    rankSel.value = rank; countSel.value = count;
-  } else {
-    rankSel.value = 0; countSel.value = 1;
-  }
+function renderReveal(room){
+  const box = $('reveal-box'); box.classList.remove('hidden');
+  const ch = room.challengeReveal;
+  const list = $('reveal-cards'); list.innerHTML = '';
+  ch.ranks.forEach(r => {
+    const div = document.createElement('div');
+    const match = r === room.centerRank;
+    div.className = 'mini-card ' + (match ? 'match' : 'mismatch');
+    div.textContent = RANKS[r];
+    list.appendChild(div);
+  });
+  $('reveal-result').textContent = ch.resultText || '';
 }
 
 function renderMyHand(){
   const el = $('my-hand');
   el.innerHTML = '';
-  (handsCache || []).forEach(rankIdx => {
+  (handsCache || []).forEach((rankIdx, i) => {
     const c = document.createElement('div');
-    c.className = 'card';
+    c.className = 'hand-card' + (selectedIdx.includes(i) ? ' selected' : '');
     c.textContent = RANKS[rankIdx];
+    c.addEventListener('click', () => toggleSelect(i));
     el.appendChild(c);
   });
+}
+
+function toggleSelect(i){
+  const room = roomCache;
+  const order = room.turnOrder || [];
+  const curUid = order[room.currentTurnIndex];
+  if (curUid !== myUid || room.status !== 'playing') return; // ไม่ใช่ตาเรา เลือกไม่ได้
+  const pos = selectedIdx.indexOf(i);
+  if (pos === -1) selectedIdx.push(i); else selectedIdx.splice(pos, 1);
+  renderMyHand();
+  updatePlayButtonState();
+}
+
+function updatePlayButtonState(){
+  $('selected-count').textContent = selectedIdx.length;
+  const room = roomCache;
+  const order = room.turnOrder || [];
+  const curUid = order[room.currentTurnIndex];
+  const myTurn = curUid === myUid && room.status === 'playing';
+  $('btn-play').disabled = !myTurn || selectedIdx.length === 0;
 }
 
 function renderLog(logObj){
@@ -339,28 +336,19 @@ function renderLog(logObj){
   const entries = Object.values(logObj || {}).sort((a,b) => a.ts - b.ts);
   entries.forEach(e => {
     const li = document.createElement('li');
-    if (e.type === 'liar') li.className = 'log-liar';
+    if (e.type === 'danger') li.className = 'log-danger';
     if (e.type === 'win') li.className = 'log-win';
     li.textContent = e.text;
     list.appendChild(li);
   });
 }
 
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-}
-
 /* ------------------------------ PLAYER ACTIONS ------------------------------ */
 
-$('btn-bid').addEventListener('click', () => {
-  const rank = parseInt($('bid-rank').value, 10);
-  const count = parseInt($('bid-count').value, 10);
-  const cur = roomCache.currentBid;
-  if (cur){
-    const legal = (count > cur.count) || (count === cur.count && rank > cur.rank);
-    if (!legal){ toast('ต้องกล่าวอ้างให้สูงกว่าเดิม (จำนวนมากกว่า หรือจำนวนเท่ากันแต่อันดับสูงกว่า)'); return; }
-  }
-  db.ref(`rooms/${roomCode}/pendingAction`).set({ type:'bid', uid: myUid, rank, count, ts: Date.now() });
+$('btn-play').addEventListener('click', () => {
+  if (selectedIdx.length === 0) return;
+  db.ref(`rooms/${roomCode}/pendingAction`).set({ type:'play', uid: myUid, indexes: [...selectedIdx].sort((a,b)=>a-b), ts: Date.now() });
+  selectedIdx = [];
 });
 
 $('btn-liar').addEventListener('click', () => {
@@ -369,8 +357,7 @@ $('btn-liar').addEventListener('click', () => {
 
 /* ------------------------------ HOST REFEREE LOGIC ------------------------------ */
 
-let pendingWatchAttached = false;
-function hostWatchPendingAction(room){
+function hostWatchPendingAction(){
   if (pendingWatchAttached) return;
   pendingWatchAttached = true;
   db.ref(`rooms/${roomCode}/pendingAction`).on('value', snap => {
@@ -378,38 +365,6 @@ function hostWatchPendingAction(room){
     if (!action || !roomCache) return;
     processPendingAction(action).catch(err => console.error(err));
   });
-}
-
-async function processPendingAction(action){
-  const room = roomCache;
-  if (room.status !== 'playing') return;
-  const order = room.turnOrder || [];
-  const curUid = order[room.currentTurnIndex];
-  if (action.uid !== curUid) { db.ref(`rooms/${roomCode}/pendingAction`).remove(); return; }
-
-  if (action.type === 'bid'){
-    const nextIndex = nextAliveIndex(order, room.currentTurnIndex, room.players);
-    const p = room.players[action.uid];
-    const updates = {};
-    updates[`rooms/${roomCode}/currentBid`] = { rank: action.rank, count: action.count, byUid: action.uid, byName: p.name };
-    updates[`rooms/${roomCode}/currentTurnIndex`] = nextIndex;
-    updates[`rooms/${roomCode}/pendingAction`] = null;
-    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `${p.name} กล่าวอ้าง: ${action.count} × ${RANKS[action.rank]}`, type:'info', ts: Date.now() };
-    await db.ref().update(updates);
-  }
-
-  if (action.type === 'liar'){
-    const bid = room.currentBid;
-    if (!bid){ db.ref(`rooms/${roomCode}/pendingAction`).remove(); return; }
-    const caller = room.players[action.uid];
-    const updates = {};
-    updates[`rooms/${roomCode}/status`] = 'revealing';
-    updates[`rooms/${roomCode}/challenge`] = { active:true, callerUid: action.uid, callerName: caller.name, bidderUid: bid.byUid, bidderName: bid.byName, rank: bid.rank, count: bid.count };
-    updates[`rooms/${roomCode}/reveals`] = null;
-    updates[`rooms/${roomCode}/pendingAction`] = null;
-    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `🏴‍☠️ ${caller.name} ตะโกน "โป้!" ใส่คำกล่าวอ้าง ${bid.count} × ${RANKS[bid.rank]}`, type:'liar', ts: Date.now() };
-    await db.ref().update(updates);
-  }
 }
 
 function nextAliveIndex(order, fromIndex, players){
@@ -421,97 +376,93 @@ function nextAliveIndex(order, fromIndex, players){
   return fromIndex;
 }
 
-/* ------------------------------ REVEAL / CHALLENGE ------------------------------ */
+async function processPendingAction(action){
+  const room = roomCache;
+  if (room.status !== 'playing') return;
+  const order = room.turnOrder || [];
+  const curUid = order[room.currentTurnIndex];
+  if (action.uid !== curUid){ db.ref(`rooms/${roomCode}/pendingAction`).remove(); return; }
 
-let revealSubmittedFor = null;
-function handleRevealing(room){
-  $('challenge-reveal').classList.remove('hidden');
-  const ch = room.challenge;
-  if (!ch) return;
+  if (action.type === 'play'){
+    const handSnap = await db.ref(`rooms/${roomCode}/hands/${action.uid}`).get();
+    const hand = handSnap.val() || [];
+    const idxSet = [...new Set(action.indexes)].filter(i => i >=0 && i < hand.length);
+    if (idxSet.length === 0){ db.ref(`rooms/${roomCode}/pendingAction`).remove(); return; }
 
-  const revealKey = room.round + ':' + ch.callerUid + ':' + ch.bidderUid;
-  const alive = (room.turnOrder || []).filter(uid => room.players[uid] && room.players[uid].alive);
+    const playedRanks = idxSet.map(i => hand[i]);
+    const remainingHand = hand.filter((_, i) => !idxSet.includes(i));
+    const p = room.players[action.uid];
+    const nextIndex = nextAliveIndex(order, room.currentTurnIndex, room.players);
 
-  // every alive player self-reports how many of the claimed rank they hold
-  if (revealSubmittedFor !== revealKey && handsCache){
-    const myCount = handsCache.filter(r => r === ch.rank).length;
-    db.ref(`rooms/${roomCode}/reveals/${myUid}`).set(myCount);
-    revealSubmittedFor = revealKey;
+    const updates = {};
+    updates[`rooms/${roomCode}/hands/${action.uid}`] = remainingHand;
+    updates[`rooms/${roomCode}/secretPile`] = { ranks: playedRanks, ownerUid: action.uid, ownerName: p.name };
+    updates[`rooms/${roomCode}/pile`] = { ownerUid: action.uid, ownerName: p.name, count: playedRanks.length };
+    updates[`rooms/${roomCode}/currentTurnIndex`] = nextIndex;
+    updates[`rooms/${roomCode}/pendingAction`] = null;
+    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `${p.name} เล่นไพ่ไป ${playedRanks.length} ใบ (ปิดหน้า)`, type:'info', ts: Date.now() };
+    await db.ref().update(updates);
   }
 
-  db.ref(`rooms/${roomCode}/reveals`).on('value', snap => {
-    const reveals = snap.val() || {};
-    renderRevealProgress(reveals, alive, room);
-    if (isHost && Object.keys(reveals).length >= alive.length){
-      resolveChallenge(room, reveals).catch(err => console.error(err));
+  if (action.type === 'liar'){
+    const pile = room.pile;
+    if (!pile){ db.ref(`rooms/${roomCode}/pendingAction`).remove(); return; }
+    const secretSnap = await db.ref(`rooms/${roomCode}/secretPile`).get();
+    const secret = secretSnap.val();
+    const caller = room.players[action.uid];
+    const centerRank = room.centerRank;
+    const allMatch = secret.ranks.every(r => r === centerRank);
+    const loserUid = allMatch ? action.uid : secret.ownerUid;
+    const loser = room.players[loserUid];
+    const newLives = Math.max(loser.lives - 1, 0);
+    const eliminated = newLives === 0;
+
+    const resultText = allMatch
+      ? `เปิดไพ่: ตรงไพ่ส่วนกลางจริงทุกใบ! ${caller.name} โป้พลาด เสียชีวิต 1 ดวง`
+      : `เปิดไพ่: มีไพ่ไม่ตรง! ${secret.ownerName} โป้จริง เสียชีวิต 1 ดวง`;
+
+    const updates = {};
+    updates[`rooms/${roomCode}/status`] = 'revealing';
+    updates[`rooms/${roomCode}/challengeReveal`] = { ranks: secret.ranks, ownerUid: secret.ownerUid, ownerName: secret.ownerName, callerUid: action.uid, callerName: caller.name, resultText };
+    updates[`rooms/${roomCode}/players/${loserUid}/lives`] = newLives;
+    updates[`rooms/${roomCode}/players/${loserUid}/alive`] = !eliminated;
+    updates[`rooms/${roomCode}/pendingAction`] = null;
+    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `🔫 ${caller.name} กดโป้ใส่ ${secret.ownerName}! ${resultText}`, type:'danger', ts: Date.now() };
+    if (eliminated){
+      updates[`rooms/${roomCode}/log/${Date.now()+1}`] = { text: `💀 ${loser.name} หมดชีวิต ออกจากเกม!`, type:'danger', ts: Date.now()+1 };
     }
-  });
+    await db.ref().update(updates);
+
+    setTimeout(() => finishRound(loserUid, eliminated).catch(err => console.error(err)), REVEAL_PAUSE_MS);
+  }
 }
 
-function renderRevealProgress(reveals, alive, room){
-  const list = $('reveal-list');
-  list.innerHTML = '';
-  alive.forEach(uid => {
-    const p = room.players[uid];
-    const chip = document.createElement('div');
-    chip.className = 'reveal-chip';
-    chip.textContent = `${p.name}: ${uid in reveals ? reveals[uid] : '...'}`;
-    list.appendChild(chip);
-  });
-  const total = Object.values(reveals).reduce((a,b) => a+b, 0);
-  const ch = room.challenge;
-  $('reveal-result').textContent = Object.keys(reveals).length < alive.length
-    ? `กำลังรวบรวมไพ่... (พบแล้ว ${total} ใบ / อ้าง ${ch.count} ใบ)`
-    : '';
-}
+async function finishRound(loserUid, eliminated){
+  const snap = await db.ref('rooms/' + roomCode).get();
+  const room = snap.val();
+  if (!room || room.status !== 'revealing') return;
 
-async function resolveChallenge(room, reveals){
-  const ch = room.challenge;
-  if (!ch || room._resolving) return;
-  const total = Object.values(reveals).reduce((a,b) => a+b, 0);
-  const bidHeld = total >= ch.count;
-  // if the claim holds true, the challenger was wrong and loses a life; otherwise the bidder was bluffing and loses a life
-  const loserUid = bidHeld ? ch.callerUid : ch.bidderUid;
-  const loser = room.players[loserUid];
-  const newLives = Math.max(loser.lives - 1, 0);
-  const eliminated = newLives === 0;
+  const order = room.turnOrder || [];
+  const aliveUids = order.filter(uid => uid === loserUid ? !eliminated : (room.players[uid] && room.players[uid].alive));
 
   const updates = {};
-  updates[`rooms/${roomCode}/players/${loserUid}/lives`] = newLives;
-  updates[`rooms/${roomCode}/players/${loserUid}/alive`] = !eliminated;
-  updates[`rooms/${roomCode}/log/${Date.now()}`] = {
-    text: bidHeld
-      ? `เปิดไพ่: พบ ${total} ใบ ≥ ${ch.count} → คำกล่าวอ้างเป็นจริง! ${ch.callerName} เสียชีวิต 1 ดวง`
-      : `เปิดไพ่: พบเพียง ${total} ใบ < ${ch.count} → ${ch.bidderName} โป้จริง! เสียชีวิต 1 ดวง`,
-    type: eliminated ? 'liar' : 'info', ts: Date.now()
-  };
-  if (eliminated){
-    updates[`rooms/${roomCode}/log/${Date.now()+1}`] = { text: `🌊 ${loser.name} เดินไม้กระดานตกเรือไป!`, type:'liar', ts: Date.now()+1 };
-  }
-
-  // recompute alive roster
-  const aliveUids = (room.turnOrder || []).filter(uid => uid === loserUid ? !eliminated : (room.players[uid] && room.players[uid].alive));
-
   if (aliveUids.length <= 1){
     updates[`rooms/${roomCode}/status`] = 'ended';
     updates[`rooms/${roomCode}/winnerUid`] = aliveUids[0] || null;
-    updates[`rooms/${roomCode}/log/${Date.now()+2}`] = { text: `🏆 ${aliveUids[0] ? room.players[aliveUids[0]].name : 'ไม่มีใคร'} คือผู้รอดชีวิตคนสุดท้าย!`, type:'win', ts: Date.now()+2 };
+    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `🏆 ${aliveUids[0] ? room.players[aliveUids[0]].name : 'ไม่มีใคร'} คือผู้รอดชีวิตคนสุดท้าย!`, type:'win', ts: Date.now() };
   } else {
-    const { hands, totalCards } = dealHands(aliveUids);
+    const { hands } = dealHands(aliveUids);
     let nextIdx = aliveUids.indexOf(loserUid);
     if (nextIdx === -1) nextIdx = 0;
     updates[`rooms/${roomCode}/status`] = 'playing';
     updates[`rooms/${roomCode}/round`] = (room.round || 1) + 1;
     updates[`rooms/${roomCode}/turnOrder`] = aliveUids;
     updates[`rooms/${roomCode}/currentTurnIndex`] = nextIdx;
-    updates[`rooms/${roomCode}/currentBid`] = null;
-    updates[`rooms/${roomCode}/challenge`] = null;
-    updates[`rooms/${roomCode}/reveals`] = null;
-    updates[`rooms/${roomCode}/totalCardsInPlay`] = totalCards;
+    updates[`rooms/${roomCode}/centerRank`] = Math.floor(Math.random() * RANKS.length);
+    updates[`rooms/${roomCode}/pile`] = null;
+    updates[`rooms/${roomCode}/secretPile`] = null;
+    updates[`rooms/${roomCode}/challengeReveal`] = null;
     updates[`rooms/${roomCode}/hands`] = hands;
   }
-
-  roomCache._resolving = true;
   await db.ref().update(updates);
-  db.ref(`rooms/${roomCode}/reveals`).off('value');
 }

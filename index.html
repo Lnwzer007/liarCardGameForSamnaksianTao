@@ -3,137 +3,132 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Liar's Cards — Ship of Deceit</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<title>ไพ่โป้ | Liar's Cards</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<div class="sea-bg"><div class="waves"></div></div>
-
-<!-- ================= SCREEN: HOME ================= -->
+<!-- ================= หน้าแรก ================= -->
 <section id="screen-home" class="screen active">
-  <div class="wheel-mark" aria-hidden="true">☠</div>
-  <h1 class="brand">Liar's Cards<span class="brand-sub">Ship of Deceit</span></h1>
-  <p class="tagline">บลัฟให้เนียน นับให้แม่น ใครโป้ต้องเดินไม้กระดาน</p>
+  <div class="home-wrap">
+    <h1 class="app-title">🔫 ไพ่โป้</h1>
+    <p class="app-sub">เล่นไพ่ให้ตรงไพ่ส่วนกลาง หรือกล้าเสี่ยงโป้เพื่อน — ใครโป้โดนยิง</p>
 
-  <div class="panel home-panel">
-    <label class="field">
-      <span>ชื่อกัปตัน (ชื่อผู้เล่น)</span>
-      <input id="input-name" type="text" maxlength="16" placeholder="เช่น กัปตันหมี" autocomplete="off">
-    </label>
-
-    <div class="home-actions">
-      <button id="btn-create" class="btn btn-brass">⚓ สร้างเรือใหม่</button>
-      <div class="divider"><span>หรือ</span></div>
+    <div class="card">
       <label class="field">
-        <span>รหัสเรือ (6 ตัวอักษร)</span>
-        <input id="input-code" type="text" maxlength="6" placeholder="ABCXYZ" autocomplete="off" style="text-transform:uppercase">
+        <span>ชื่อของคุณ</span>
+        <input id="input-name" type="text" maxlength="16" placeholder="ใส่ชื่อเล่น" autocomplete="off">
       </label>
-      <button id="btn-join" class="btn btn-teal">🚩 ขึ้นเรือ</button>
-    </div>
-    <p id="home-error" class="error-text"></p>
-  </div>
 
-  <details class="setup-help">
-    <summary>ตั้งค่า Firebase ก่อนใช้งาน (ทำครั้งเดียว)</summary>
-    <p>เปิดไฟล์ <code>firebase-config.js</code> แล้ววาง config จาก Firebase Console ของคุณ ดูขั้นตอนละเอียดใน <code>README.md</code></p>
-  </details>
+      <button id="btn-create" class="btn btn-primary btn-block">สร้างห้องใหม่</button>
+
+      <div class="or-line"><span>หรือ</span></div>
+
+      <label class="field">
+        <span>รหัสห้อง</span>
+        <input id="input-code" type="text" maxlength="6" placeholder="ใส่รหัส 6 ตัว" autocomplete="off" style="text-transform:uppercase">
+      </label>
+      <button id="btn-join" class="btn btn-secondary btn-block">เข้าร่วมห้อง</button>
+
+      <p id="home-error" class="error-text"></p>
+    </div>
+
+    <details class="setup-help">
+      <summary>ตั้งค่า Firebase (ทำครั้งเดียว)</summary>
+      <p>แก้ไฟล์ <code>firebase-config.js</code> ให้เป็นของโปรเจกต์คุณ ดูขั้นตอนใน <code>README.md</code></p>
+    </details>
+  </div>
 </section>
 
-<!-- ================= SCREEN: LOBBY ================= -->
+<!-- ================= ห้องรอ ================= -->
 <section id="screen-lobby" class="screen">
-  <div class="panel lobby-panel">
-    <div class="lobby-head">
-      <div>
-        <p class="eyebrow">รหัสเรือ</p>
-        <h2 id="lobby-code" class="room-code">------</h2>
-      </div>
-      <button id="btn-copy-code" class="btn btn-ghost btn-sm">คัดลอก</button>
-    </div>
-
-    <ul id="lobby-players" class="player-manifest"></ul>
-
-    <div class="lobby-controls">
-      <label class="field field-inline" id="lives-setting">
-        <span>จำนวนชีวิตเริ่มต้น</span>
-        <select id="input-lives">
-          <option value="2">2</option>
-          <option value="3" selected>3</option>
-          <option value="4">4</option>
-        </select>
-      </label>
-      <button id="btn-start" class="btn btn-brass" disabled>เริ่มออกเรือ (ต้องมี ≥ 2 คน)</button>
-      <p id="lobby-wait" class="muted">รอกัปตันเรือ (host) กดเริ่มเกม...</p>
-    </div>
-    <button id="btn-leave-lobby" class="btn btn-ghost btn-sm">ออกจากเรือ</button>
-  </div>
-</section>
-
-<!-- ================= SCREEN: GAME TABLE ================= -->
-<section id="screen-game" class="screen">
-  <header class="table-topbar">
-    <div class="topbar-item"><span class="eyebrow">เรือ</span><strong id="hud-code">------</strong></div>
-    <div class="topbar-item"><span class="eyebrow">รอบที่</span><strong id="hud-round">1</strong></div>
-    <div class="topbar-item"><span class="eyebrow">ไพ่ในวง</span><strong id="hud-total-cards">0</strong></div>
-    <button id="btn-leave-game" class="btn btn-ghost btn-sm">ออก</button>
-  </header>
-
-  <div class="table-layout">
-    <aside class="manifest-rail">
-      <h3 class="rail-title">ลูกเรือ</h3>
-      <ul id="game-players" class="player-manifest compact"></ul>
-    </aside>
-
-    <main class="table-main">
-      <div class="bid-stage">
-        <p class="eyebrow">คำกล่าวอ้างล่าสุด</p>
-        <div id="current-bid" class="current-bid">ยังไม่มีใครกล่าวอ้าง</div>
-        <p id="turn-indicator" class="turn-indicator"></p>
-      </div>
-
-      <div id="challenge-reveal" class="reveal-box hidden">
-        <p class="eyebrow">เปิดไพ่พิสูจน์!</p>
-        <div id="reveal-list" class="reveal-list"></div>
-        <p id="reveal-result" class="reveal-result"></p>
-      </div>
-
-      <div class="hand-area">
-        <p class="eyebrow">ไพ่ในมือของคุณ</p>
-        <div id="my-hand" class="my-hand"></div>
-      </div>
-
-      <div id="action-panel" class="action-panel">
-        <div class="bid-picker">
-          <label class="field-inline">
-            <span>อันดับ</span>
-            <select id="bid-rank"></select>
-          </label>
-          <label class="field-inline">
-            <span>จำนวน</span>
-            <select id="bid-count"></select>
-          </label>
-          <button id="btn-bid" class="btn btn-brass">กล่าวอ้าง</button>
+  <div class="wrap-narrow">
+    <div class="card">
+      <div class="row-between">
+        <div>
+          <p class="label-sm">รหัสห้อง</p>
+          <h2 id="lobby-code" class="room-code">------</h2>
         </div>
-        <button id="btn-liar" class="btn btn-rust" disabled>🏴‍☠️ โป้!! (Liar)</button>
+        <button id="btn-copy-code" class="btn btn-outline btn-sm">คัดลอก</button>
       </div>
 
-      <div class="log-wrap">
-        <p class="eyebrow">สมุดบันทึกเรือ</p>
-        <ul id="game-log" class="game-log"></ul>
+      <ul id="lobby-players" class="player-list"></ul>
+
+      <div class="lobby-settings">
+        <label class="field field-row" id="lives-setting">
+          <span>จำนวนชีวิต</span>
+          <select id="input-lives">
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="4">4</option>
+          </select>
+        </label>
       </div>
-    </main>
+
+      <button id="btn-start" class="btn btn-primary btn-block" disabled>เริ่มเกม (ต้องมี ≥ 2 คน)</button>
+      <p id="lobby-wait" class="muted center">รอเจ้าของห้องกดเริ่มเกม...</p>
+      <button id="btn-leave-lobby" class="btn btn-text btn-block">ออกจากห้อง</button>
+    </div>
   </div>
 </section>
 
-<!-- ================= SCREEN: GAME OVER ================= -->
+<!-- ================= โต๊ะเกม ================= -->
+<section id="screen-game" class="screen">
+  <div class="wrap-narrow">
+
+    <div class="topbar">
+      <span class="chip">ห้อง <strong id="hud-code">------</strong></span>
+      <span class="chip">รอบ <strong id="hud-round">1</strong></span>
+      <button id="btn-leave-game" class="btn btn-text btn-sm">ออก</button>
+    </div>
+
+    <ul id="game-players" class="player-list compact"></ul>
+
+    <div class="center-area">
+      <div class="center-card-box">
+        <p class="label-sm">ไพ่ส่วนกลาง (ทุกคนต้องอ้างว่าไพ่ที่เล่นตรงกับใบนี้)</p>
+        <div id="center-card" class="big-card accent">?</div>
+      </div>
+      <div class="pile-box">
+        <p class="label-sm">กองไพ่ล่าสุด</p>
+        <p id="pile-info" class="pile-info">ยังไม่มีใครเล่นไพ่</p>
+      </div>
+    </div>
+
+    <div id="status-banner" class="status-banner"></div>
+
+    <div id="reveal-box" class="reveal-box hidden">
+      <p class="label-sm">เปิดไพ่พิสูจน์!</p>
+      <div id="reveal-cards" class="reveal-cards"></div>
+      <p id="reveal-result" class="reveal-result"></p>
+    </div>
+
+    <div class="my-hand-box">
+      <p class="label-sm">ไพ่ในมือคุณ (แตะเพื่อเลือก)</p>
+      <div id="my-hand" class="hand-grid"></div>
+    </div>
+
+    <div id="action-panel" class="action-row hidden">
+      <button id="btn-play" class="btn btn-primary" disabled>เล่นไพ่ที่เลือก (<span id="selected-count">0</span>)</button>
+      <button id="btn-liar" class="btn btn-danger" disabled>🔫 โป้! (Liar)</button>
+    </div>
+
+    <div class="log-card">
+      <p class="label-sm">เหตุการณ์</p>
+      <ul id="game-log" class="game-log"></ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================= จบเกม ================= -->
 <section id="screen-over" class="screen">
-  <div class="panel over-panel">
-    <div class="wheel-mark" aria-hidden="true">🏆</div>
-    <h2>เกมจบแล้ว</h2>
-    <p id="over-text" class="over-text"></p>
-    <button id="btn-play-again" class="btn btn-brass">กลับหน้าแรก</button>
+  <div class="wrap-narrow center">
+    <div class="card center">
+      <div class="trophy">🏆</div>
+      <h2>เกมจบแล้ว</h2>
+      <p id="over-text" class="over-text"></p>
+      <button id="btn-play-again" class="btn btn-primary btn-block">กลับหน้าแรก</button>
+    </div>
   </div>
 </section>
 
