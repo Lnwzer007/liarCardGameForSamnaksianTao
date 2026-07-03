@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ไพ่โป้ | Liar's Cards</title>
 <link rel="stylesheet" href="style.css">
+<style>
+  .hand-card.wild, .mini-card.wild { border-color:#d4a017; box-shadow:0 0 0 2px rgba(212,160,23,.35) inset; }
+  .hand-card.wild::after, .mini-card.wild::after { content:"WILD"; display:block; font-size:9px; letter-spacing:.05em; opacity:.7; }
+</style>
 </head>
 <body>
 
@@ -89,10 +93,15 @@
         <p class="label-sm">ไพ่ส่วนกลาง (ทุกคนต้องอ้างว่าไพ่ที่เล่นตรงกับใบนี้)</p>
         <div id="center-card" class="big-card accent">?</div>
         <p id="center-total" class="center-total"></p>
+        <p id="active-set-info" class="muted" style="font-size:12px;margin-top:2px"></p>
       </div>
       <div class="pile-box">
         <p class="label-sm">กองไพ่ล่าสุด</p>
         <p id="pile-info" class="pile-info">ยังไม่มีใครเล่นไพ่</p>
+      </div>
+      <div class="pile-box">
+        <p class="label-sm">กองจั่ว</p>
+        <p id="draw-info" class="pile-info">เหลือไพ่ในกองจั่ว 0 ใบ</p>
       </div>
     </div>
 
@@ -110,6 +119,7 @@
     </div>
 
     <div id="action-panel" class="action-row hidden">
+      <button id="btn-draw" class="btn btn-outline" disabled>🂠 จั่วไพ่ (<span id="draw-remaining">0</span>)</button>
       <button id="btn-play" class="btn btn-primary" disabled>เล่นไพ่ที่เลือก (<span id="selected-count">0</span>)</button>
       <button id="btn-liar" class="btn btn-danger" disabled>🔫 โป้! (Liar)</button>
     </div>
