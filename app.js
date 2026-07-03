@@ -4,7 +4,7 @@
    ========================================================================== */
 
 const RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
-const HAND_SIZE = 5;
+const HAND_SIZE = 8;
 const MAX_PLAYERS = 10;
 const REVEAL_PAUSE_MS = 3800;
 
@@ -302,7 +302,7 @@ function goHome(){
 function dealHands(uids){
   const n = uids.length;
   const pool = [];
-  RANKS.forEach((r, i) => { for (let k=0; k<n*2; k++) pool.push(i); });
+  RANKS.forEach((r, i) => { for (let k=0; k<n*3; k++) pool.push(i); }); // n*3 สำเนาต่ออันดับ เผื่อไพ่พอสำหรับมือที่ใหญ่ขึ้น
   shuffle(pool);
   const hands = {};
   let cursor = 0;
