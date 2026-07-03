@@ -1,143 +1,183 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ไพ่โป้ | Liar's Cards</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
+:root{
+  --bg:#f5f6f8;
+  --surface:#ffffff;
+  --text:#1a1d23;
+  --text-dim:#6b7280;
+  --primary:#2f6fed;
+  --primary-dark:#2456c2;
+  --secondary:#0d9488;
+  --danger:#e11d48;
+  --danger-dark:#be123c;
+  --success:#16a34a;
+  --border:#e4e7ec;
+  --radius:14px;
+  --shadow:0 2px 8px rgba(16,24,40,.06);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
 
-<!-- ================= หน้าแรก ================= -->
-<section id="screen-home" class="screen active">
-  <div class="home-wrap">
-    <h1 class="app-title">🔫 ไพ่โป้</h1>
-    <p class="app-sub">เล่นไพ่ให้ตรงไพ่ส่วนกลาง หรือกล้าเสี่ยงโป้เพื่อน — ใครโป้โดนยิง</p>
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
 
-    <div class="card">
-      <label class="field">
-        <span>ชื่อของคุณ</span>
-        <input id="input-name" type="text" maxlength="16" placeholder="ใส่ชื่อเล่น" autocomplete="off">
-      </label>
+.screen{display:none; min-height:100vh; padding:20px 16px 60px;}
+.screen.active{display:block;}
 
-      <button id="btn-create" class="btn btn-primary btn-block">สร้างห้องใหม่</button>
+.wrap-narrow{max-width:480px; margin:0 auto;}
+.center{text-align:center;}
 
-      <div class="or-line"><span>หรือ</span></div>
+/* ---------- home ---------- */
+.home-wrap{max-width:420px; margin:40px auto 0; text-align:center;}
+.app-title{font-size:32px; margin:0 0 6px;}
+.app-sub{color:var(--text-dim); font-size:14px; margin:0 0 24px; line-height:1.5;}
 
-      <label class="field">
-        <span>รหัสห้อง</span>
-        <input id="input-code" type="text" maxlength="6" placeholder="ใส่รหัส 6 ตัว" autocomplete="off" style="text-transform:uppercase">
-      </label>
-      <button id="btn-join" class="btn btn-secondary btn-block">เข้าร่วมห้อง</button>
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:22px;
+  text-align:left;
+}
 
-      <p id="home-error" class="error-text"></p>
-    </div>
+.field{display:block; margin-bottom:14px;}
+.field span{display:block; font-size:13px; color:var(--text-dim); margin-bottom:6px; font-weight:600;}
+.field input, .field select{
+  width:100%; padding:12px 14px; border-radius:10px;
+  border:1.5px solid var(--border); background:var(--surface);
+  color:var(--text); font-family:var(--font); font-size:16px;
+  outline:none; transition:border-color .15s;
+}
+.field input:focus, .field select:focus{border-color:var(--primary);}
+.field-row{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+.field-row span{margin:0;}
+.field-row select{width:auto;}
 
-    <details class="setup-help">
-      <summary>ตั้งค่า Firebase (ทำครั้งเดียว)</summary>
-      <p>แก้ไฟล์ <code>firebase-config.js</code> ให้เป็นของโปรเจกต์คุณ ดูขั้นตอนใน <code>README.md</code></p>
-    </details>
-  </div>
-</section>
+.or-line{display:flex; align-items:center; gap:10px; color:var(--text-dim); font-size:12px; margin:16px 0; text-transform:uppercase; letter-spacing:.04em;}
+.or-line::before,.or-line::after{content:""; flex:1; height:1px; background:var(--border);}
 
-<!-- ================= ห้องรอ ================= -->
-<section id="screen-lobby" class="screen">
-  <div class="wrap-narrow">
-    <div class="card">
-      <div class="row-between">
-        <div>
-          <p class="label-sm">รหัสห้อง</p>
-          <h2 id="lobby-code" class="room-code">------</h2>
-        </div>
-        <button id="btn-copy-code" class="btn btn-outline btn-sm">คัดลอก</button>
-      </div>
+.btn{
+  font-family:var(--font); font-weight:600; font-size:15px;
+  padding:13px 18px; border-radius:10px; border:none;
+  cursor:pointer; transition:filter .12s, transform .1s;
+}
+.btn:active{transform:scale(.98);}
+.btn:disabled{opacity:.4; cursor:not-allowed;}
+.btn-block{width:100%; margin-top:4px;}
+.btn-primary{background:var(--primary); color:#fff;}
+.btn-primary:hover:not(:disabled){filter:brightness(1.08);}
+.btn-secondary{background:var(--secondary); color:#fff;}
+.btn-secondary:hover:not(:disabled){filter:brightness(1.08);}
+.btn-danger{background:var(--danger); color:#fff;}
+.btn-danger:hover:not(:disabled){filter:brightness(1.08);}
+.btn-outline{background:transparent; border:1.5px solid var(--border); color:var(--text);}
+.btn-outline:hover{border-color:var(--primary); color:var(--primary);}
+.btn-text{background:transparent; color:var(--text-dim);}
+.btn-text:hover{color:var(--danger);}
+.btn-sm{padding:8px 12px; font-size:13px;}
 
-      <ul id="lobby-players" class="player-list"></ul>
+.error-text{color:var(--danger); font-size:13px; min-height:16px; margin:10px 0 0;}
+.muted{color:var(--text-dim); font-size:14px;}
+.setup-help{max-width:420px; margin:20px auto 0; color:var(--text-dim); font-size:12px; text-align:left;}
+.setup-help summary{cursor:pointer;}
+.setup-help code{background:#eceef1; padding:2px 6px; border-radius:4px;}
+.hidden{display:none !important;}
+.label-sm{font-size:12px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.03em; margin:0 0 8px;}
 
-      <div class="lobby-settings">
-        <label class="field field-row" id="lives-setting">
-          <span>จำนวนชีวิต</span>
-          <select id="input-lives">
-            <option value="2">2</option>
-            <option value="3" selected>3</option>
-            <option value="4">4</option>
-          </select>
-        </label>
-      </div>
+/* ---------- lobby ---------- */
+.lobby-panel{margin-top:40px;}
+.row-between{display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:16px;}
+.room-code{font-size:26px; letter-spacing:.08em; margin:0; font-family:monospace;}
 
-      <button id="btn-start" class="btn btn-primary btn-block" disabled>เริ่มเกม (ต้องมี ≥ 2 คน)</button>
-      <p id="lobby-wait" class="muted center">รอเจ้าของห้องกดเริ่มเกม...</p>
-      <button id="btn-leave-lobby" class="btn btn-text btn-block">ออกจากห้อง</button>
-    </div>
-  </div>
-</section>
+.player-list{list-style:none; margin:0 0 16px; padding:0; display:flex; flex-direction:column; gap:8px;}
+.player-list li{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:10px 14px; font-size:14px;
+}
+.pm-host{font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:4px; padding:1px 6px; margin-left:6px;}
+.pm-lives{color:var(--danger); font-weight:700; letter-spacing:1px;}
+.player-list.compact li{padding:8px 10px; font-size:13px;}
+.pm-dead{opacity:.4; text-decoration:line-through;}
+.pm-turn{border-color:var(--primary); background:#eef3ff;}
 
-<!-- ================= โต๊ะเกม ================= -->
-<section id="screen-game" class="screen">
-  <div class="wrap-narrow">
+.lobby-settings{border-top:1px solid var(--border); padding-top:14px; margin-bottom:14px;}
 
-    <div class="topbar">
-      <span class="chip">ห้อง <strong id="hud-code">------</strong></span>
-      <span class="chip">รอบ <strong id="hud-round">1</strong></span>
-      <button id="btn-leave-game" class="btn btn-text btn-sm">ออก</button>
-    </div>
+/* ---------- game topbar ---------- */
+.topbar{display:flex; align-items:center; gap:8px; margin-bottom:14px;}
+.chip{background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:6px 12px; font-size:13px;}
+.topbar .btn{margin-left:auto;}
 
-    <ul id="game-players" class="player-list compact"></ul>
+/* ---------- center card / pile ---------- */
+.center-area{display:flex; gap:12px; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:14px; box-shadow:var(--shadow);}
+.center-card-box{flex-shrink:0;}
+.pile-box{flex:1;}
+.pile-info{margin:0; font-size:14px; font-weight:600;}
 
-    <div class="center-area">
-      <div class="center-card-box">
-        <p class="label-sm">ไพ่ส่วนกลาง (ทุกคนต้องอ้างว่าไพ่ที่เล่นตรงกับใบนี้)</p>
-        <div id="center-card" class="big-card accent">?</div>
-      </div>
-      <div class="pile-box">
-        <p class="label-sm">กองไพ่ล่าสุด</p>
-        <p id="pile-info" class="pile-info">ยังไม่มีใครเล่นไพ่</p>
-      </div>
-    </div>
+.big-card{
+  width:64px; height:88px; border-radius:10px;
+  background:#fff; border:2px solid var(--border);
+  display:flex; align-items:center; justify-content:center;
+  font-size:26px; font-weight:800; color:var(--text);
+}
+.big-card.accent{border-color:var(--primary); color:var(--primary); background:#eef3ff;}
 
-    <div id="status-banner" class="status-banner"></div>
+/* ---------- status / reveal ---------- */
+.status-banner{
+  text-align:center; font-weight:700; font-size:15px; min-height:20px; margin-bottom:12px;
+  color:var(--primary);
+}
+.reveal-box{
+  background:#fff1f2; border:1.5px solid var(--danger); border-radius:var(--radius);
+  padding:16px; margin-bottom:14px; text-align:center;
+}
+.reveal-cards{display:flex; gap:6px; justify-content:center; flex-wrap:wrap; margin:10px 0;}
+.reveal-cards .mini-card{
+  width:40px; height:56px; border-radius:6px; background:#fff; border:1.5px solid var(--border);
+  display:flex; align-items:center; justify-content:center; font-weight:700; font-size:15px;
+}
+.reveal-cards .mini-card.match{border-color:var(--success); color:var(--success); background:#f0fdf4;}
+.reveal-cards .mini-card.mismatch{border-color:var(--danger); color:var(--danger); background:#fff1f2;}
+.reveal-result{font-weight:700; margin:0;}
 
-    <div id="reveal-box" class="reveal-box hidden">
-      <p class="label-sm">เปิดไพ่พิสูจน์!</p>
-      <div id="reveal-cards" class="reveal-cards"></div>
-      <p id="reveal-result" class="reveal-result"></p>
-    </div>
+/* ---------- my hand ---------- */
+.my-hand-box{margin-bottom:14px;}
+.hand-grid{display:flex; gap:8px; flex-wrap:wrap;}
+.hand-card{
+  width:54px; height:74px; border-radius:8px; background:#fff; border:2px solid var(--border);
+  display:flex; align-items:center; justify-content:center; font-weight:700; font-size:19px;
+  cursor:pointer; transition:transform .1s, border-color .1s;
+  user-select:none;
+}
+.hand-card:hover{border-color:var(--primary);}
+.hand-card.selected{border-color:var(--primary); background:#eef3ff; transform:translateY(-6px);}
 
-    <div class="my-hand-box">
-      <p class="label-sm">ไพ่ในมือคุณ (แตะเพื่อเลือก)</p>
-      <div id="my-hand" class="hand-grid"></div>
-    </div>
+/* ---------- action row ---------- */
+.action-row{display:flex; gap:10px; margin-bottom:16px;}
+.action-row .btn{flex:1;}
 
-    <div id="action-panel" class="action-row hidden">
-      <button id="btn-play" class="btn btn-primary" disabled>เล่นไพ่ที่เลือก (<span id="selected-count">0</span>)</button>
-      <button id="btn-liar" class="btn btn-danger" disabled>🔫 โป้! (Liar)</button>
-    </div>
+/* ---------- log ---------- */
+.log-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px;}
+.game-log{list-style:none; margin:0; padding:0; max-height:180px; overflow-y:auto; display:flex; flex-direction:column-reverse; gap:6px;}
+.game-log li{font-size:13px; color:var(--text-dim); border-left:2px solid var(--border); padding-left:8px;}
+.game-log li.log-danger{color:var(--danger); border-color:var(--danger); font-weight:600;}
+.game-log li.log-win{color:var(--success); border-color:var(--success); font-weight:700;}
 
-    <div class="log-card">
-      <p class="label-sm">เหตุการณ์</p>
-      <ul id="game-log" class="game-log"></ul>
-    </div>
-  </div>
-</section>
+/* ---------- game over ---------- */
+.trophy{font-size:44px;}
+.over-text{font-size:16px; margin:10px 0 20px;}
 
-<!-- ================= จบเกม ================= -->
-<section id="screen-over" class="screen">
-  <div class="wrap-narrow center">
-    <div class="card center">
-      <div class="trophy">🏆</div>
-      <h2>เกมจบแล้ว</h2>
-      <p id="over-text" class="over-text"></p>
-      <button id="btn-play-again" class="btn btn-primary btn-block">กลับหน้าแรก</button>
-    </div>
-  </div>
-</section>
+/* ---------- toast ---------- */
+.toast{
+  position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(20px);
+  background:var(--text); color:#fff; padding:10px 18px; border-radius:10px; font-size:14px;
+  opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; z-index:50;
+}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
-<div id="toast" class="toast"></div>
-
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-<script src="firebase-config.js"></script>
-<script src="app.js"></script>
-</body>
-</html>
+::-webkit-scrollbar{width:6px;}
+::-webkit-scrollbar-thumb{background:var(--border); border-radius:3px;}
