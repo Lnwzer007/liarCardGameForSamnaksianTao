@@ -88,6 +88,7 @@
       <div class="center-card-box">
         <p class="label-sm">ไพ่ส่วนกลาง (ทุกคนต้องอ้างว่าไพ่ที่เล่นตรงกับใบนี้)</p>
         <div id="center-card" class="big-card accent">?</div>
+        <p id="center-total" class="center-total"></p>
       </div>
       <div class="pile-box">
         <p class="label-sm">กองไพ่ล่าสุด</p>
@@ -127,7 +128,12 @@
       <div class="trophy">🏆</div>
       <h2>เกมจบแล้ว</h2>
       <p id="over-text" class="over-text"></p>
-      <button id="btn-play-again" class="btn btn-primary btn-block">กลับหน้าแรก</button>
+
+      <ul id="rematch-list" class="player-list compact" style="text-align:left"></ul>
+      <p id="rematch-progress" class="muted center" style="margin:4px 0 14px"></p>
+
+      <button id="btn-rematch" class="btn btn-primary btn-block">🔄 โหวตเล่นอีกครั้ง</button>
+      <button id="btn-leave-over" class="btn btn-text btn-block">ออกจากห้อง</button>
     </div>
   </div>
 </section>
@@ -140,6 +146,5 @@
 <script src="firebase-config.js"></script>
 <script src="app.js"></script>
 <script src="style.css"></script>
-
 </body>
 </html>

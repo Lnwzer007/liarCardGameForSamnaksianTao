@@ -144,6 +144,8 @@ function onRoomUpdate(room){
     $('over-text').innerHTML = winner
       ? `👑 ผู้รอดชีวิตคนสุดท้าย: <strong style="color:var(--primary)">${escapeHtml(winner.name)}</strong>`
       : 'เกมจบแล้ว';
+    renderRematch(room);
+    if (isHost) hostWatchRematch();
   }
 }
 
@@ -184,12 +186,14 @@ $('btn-start').addEventListener('click', async () => {
   shuffle(uids);
 
   const { hands } = dealHands(uids);
+  const { centerRank, total } = pickCenterRankAndTotal(hands);
   const updates = {};
   updates[`rooms/${roomCode}/status`] = 'playing';
   updates[`rooms/${roomCode}/round`] = 1;
   updates[`rooms/${roomCode}/turnOrder`] = uids;
   updates[`rooms/${roomCode}/currentTurnIndex`] = 0;
-  updates[`rooms/${roomCode}/centerRank`] = Math.floor(Math.random() * RANKS.length);
+  updates[`rooms/${roomCode}/centerRank`] = centerRank;
+  updates[`rooms/${roomCode}/centerRankTotal`] = total;
   updates[`rooms/${roomCode}/pile`] = null;
   updates[`rooms/${roomCode}/secretPile`] = null;
   updates[`rooms/${roomCode}/challengeReveal`] = null;
@@ -203,7 +207,81 @@ $('btn-start').addEventListener('click', async () => {
 
 $('btn-leave-lobby').addEventListener('click', () => leaveRoom());
 $('btn-leave-game').addEventListener('click', () => leaveRoom());
-$('btn-play-again').addEventListener('click', () => goHome());
+$('btn-leave-over').addEventListener('click', () => leaveRoom());
+
+/* ------------------------------ REMATCH VOTING ------------------------------ */
+
+function renderRematch(room){
+  const players = room.players || {};
+  const votes = room.rematchVotes || {};
+  const uids = Object.keys(players);
+
+  const list = $('rematch-list');
+  list.innerHTML = '';
+  uids.forEach(uid => {
+    const p = players[uid];
+    const voted = !!votes[uid];
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${escapeHtml(p.name)}${uid===myUid?' (คุณ)':''}</span><span>${voted ? '✅ โหวตแล้ว' : '⏳ รอโหวต'}</span>`;
+    list.appendChild(li);
+  });
+
+  const votedCount = uids.filter(uid => votes[uid]).length;
+  $('rematch-progress').textContent = `${votedCount} / ${uids.length} คนโหวตแล้ว`;
+  $('btn-rematch').textContent = votes[myUid] ? '✅ ยกเลิกโหวต' : '🔄 โหวตเล่นอีกครั้ง';
+}
+
+$('btn-rematch').addEventListener('click', () => {
+  if (!roomCode || !myUid || !roomCache) return;
+  const already = !!(roomCache.rematchVotes && roomCache.rematchVotes[myUid]);
+  db.ref(`rooms/${roomCode}/rematchVotes/${myUid}`).set(already ? null : true);
+});
+
+let rematchWatchAttached = false;
+function hostWatchRematch(){
+  if (rematchWatchAttached) return;
+  rematchWatchAttached = true;
+  db.ref(`rooms/${roomCode}/rematchVotes`).on('value', snap => {
+    const room = roomCache;
+    if (!room || room.status !== 'ended') return;
+    const votes = snap.val() || {};
+    const players = room.players || {};
+    const uids = Object.keys(players);
+    if (uids.length >= 2 && uids.every(uid => votes[uid])){
+      restartGame(uids).catch(err => console.error(err));
+    }
+  });
+}
+
+async function restartGame(uids){
+  const snap = await db.ref('rooms/' + roomCode).get();
+  const room = snap.val();
+  if (!room || room.status !== 'ended') return; // กันไม่ให้รันซ้ำ
+
+  const lives = room.startingLives || 3;
+  shuffle(uids);
+  const { hands } = dealHands(uids);
+  const { centerRank, total } = pickCenterRankAndTotal(hands);
+
+  const updates = {};
+  updates[`rooms/${roomCode}/status`] = 'playing';
+  updates[`rooms/${roomCode}/round`] = 1;
+  updates[`rooms/${roomCode}/turnOrder`] = uids;
+  updates[`rooms/${roomCode}/currentTurnIndex`] = 0;
+  updates[`rooms/${roomCode}/centerRank`] = centerRank;
+  updates[`rooms/${roomCode}/centerRankTotal`] = total;
+  updates[`rooms/${roomCode}/pile`] = null;
+  updates[`rooms/${roomCode}/secretPile`] = null;
+  updates[`rooms/${roomCode}/challengeReveal`] = null;
+  updates[`rooms/${roomCode}/pendingAction`] = null;
+  updates[`rooms/${roomCode}/rematchVotes`] = null;
+  updates[`rooms/${roomCode}/winnerUid`] = null;
+  uids.forEach(uid => { updates[`rooms/${roomCode}/players/${uid}/lives`] = lives; updates[`rooms/${roomCode}/players/${uid}/alive`] = true; });
+  updates[`rooms/${roomCode}/hands`] = hands;
+  updates[`rooms/${roomCode}/log`] = { [Date.now()]: { text: `🔄 เริ่มเกมใหม่! แจกไพ่คนละ ${HAND_SIZE} ใบ`, type:'info', ts: Date.now() } };
+
+  await db.ref().update(updates);
+}
 
 function leaveRoom(){
   if (roomCode && myUid) db.ref(`rooms/${roomCode}/players/${myUid}`).remove();
@@ -214,6 +292,7 @@ function goHome(){
   if (handListener) db.ref(`rooms/${roomCode}/hands/${myUid}`).off('value', handListener);
   roomListener = handListener = null;
   pendingWatchAttached = false;
+  rematchWatchAttached = false;
   roomCode = null; isHost = false; roomCache = null; handsCache = null; selectedIdx = [];
   showScreen('screen-home');
 }
@@ -229,6 +308,30 @@ function dealHands(uids){
   let cursor = 0;
   uids.forEach(uid => { hands[uid] = pool.slice(cursor, cursor + HAND_SIZE); cursor += HAND_SIZE; });
   return { hands };
+}
+
+// เลือกไพ่ส่วนกลาง แล้วนับว่าทั้งกระดานมีไพ่อันดับนี้กระจายอยู่ในมือทุกคนรวมกันกี่ใบ
+// (บอกให้ทุกคนรู้ตัวเลขนี้ไว้เป็นตัวช่วยจับโกหก แต่ไม่บอกว่าใครถืออยู่กี่ใบ)
+function pickCenterRankAndTotal(hands){
+  let centerRank, total;
+  for (let attempt = 0; attempt < 6; attempt++){
+    centerRank = Math.floor(Math.random() * RANKS.length);
+    total = 0;
+    Object.values(hands).forEach(h => { total += h.filter(r => r === centerRank).length; });
+    if (total > 0) break; // เลี่ยงกรณีไม่มีไพ่อันดับนี้เลยในมือใคร ถ้าเลี่ยงได้
+  }
+  return { centerRank, total };
+}
+
+// หาว่าตาถัดไปควรเป็นใคร โดยข้าม "คนที่เพิ่งโดนยิง" ไปเลย ให้เริ่มที่คนถัดไปจากเขาแทน
+function findNextStarter(oldOrder, aliveUids, loserUid){
+  const n = oldOrder.length;
+  const loserPos = oldOrder.indexOf(loserUid);
+  for (let step = 1; step <= n; step++){
+    const uid = oldOrder[(loserPos + step) % n];
+    if (aliveUids.includes(uid)) return aliveUids.indexOf(uid);
+  }
+  return 0;
 }
 
 /* ------------------------------- GAME UI ------------------------------- */
@@ -254,6 +357,9 @@ function renderGame(room){
 
   // center card + pile
   $('center-card').textContent = room.centerRank !== undefined ? RANKS[room.centerRank] : '?';
+  $('center-total').textContent = room.centerRankTotal !== undefined
+    ? `รวมทั้งโต๊ะมีไพ่อันดับนี้อยู่ ${room.centerRankTotal} ใบ (กระจายอยู่ในมือทุกคน)`
+    : '';
   const pile = room.pile;
   $('pile-info').textContent = pile ? `${pile.ownerName} เล่นไปแล้ว ${pile.count} ใบ (ปิดหน้า)` : 'ยังไม่มีใครเล่นไพ่ในรอบนี้';
 
@@ -452,13 +558,14 @@ async function finishRound(loserUid, eliminated){
     updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `🏆 ${aliveUids[0] ? room.players[aliveUids[0]].name : 'ไม่มีใคร'} คือผู้รอดชีวิตคนสุดท้าย!`, type:'win', ts: Date.now() };
   } else {
     const { hands } = dealHands(aliveUids);
-    let nextIdx = aliveUids.indexOf(loserUid);
-    if (nextIdx === -1) nextIdx = 0;
+    const { centerRank, total } = pickCenterRankAndTotal(hands);
+    const nextIdx = findNextStarter(order, aliveUids, loserUid);
     updates[`rooms/${roomCode}/status`] = 'playing';
     updates[`rooms/${roomCode}/round`] = (room.round || 1) + 1;
     updates[`rooms/${roomCode}/turnOrder`] = aliveUids;
     updates[`rooms/${roomCode}/currentTurnIndex`] = nextIdx;
-    updates[`rooms/${roomCode}/centerRank`] = Math.floor(Math.random() * RANKS.length);
+    updates[`rooms/${roomCode}/centerRank`] = centerRank;
+    updates[`rooms/${roomCode}/centerRankTotal`] = total;
     updates[`rooms/${roomCode}/pile`] = null;
     updates[`rooms/${roomCode}/secretPile`] = null;
     updates[`rooms/${roomCode}/challengeReveal`] = null;

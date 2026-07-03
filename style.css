@@ -125,6 +125,7 @@ body{
   font-size:26px; font-weight:800; color:var(--text);
 }
 .big-card.accent{border-color:var(--primary); color:var(--primary); background:#eef3ff;}
+.center-total{margin:6px 0 0; font-size:12px; font-weight:700; color:var(--secondary); text-align:center;}
 
 /* ---------- status / reveal ---------- */
 .status-banner{
