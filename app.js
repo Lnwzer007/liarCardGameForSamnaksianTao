@@ -76,7 +76,7 @@ function waitForAuth(){
 
 $('btn-create').addEventListener('click', async () => {
   myName = $('input-name').value.trim();
-  if (!myName){ $('home-error').textContent = 'กรุณาใส่ชื่อก่อนนะ'; return; }
+  if (!myName){ $('home-error').textContent = 'กรอกชื่อก่อนเริ่มเกม'; return; }
   if (!myUid) await waitForAuth();
 
   const code = randCode();
@@ -94,18 +94,18 @@ $('btn-create').addEventListener('click', async () => {
 $('btn-join').addEventListener('click', async () => {
   myName = $('input-name').value.trim();
   const code = $('input-code').value.trim().toUpperCase();
-  if (!myName){ $('home-error').textContent = 'กรุณาใส่ชื่อก่อนนะ'; return; }
-  if (!code){ $('home-error').textContent = 'กรุณาใส่รหัสห้อง'; return; }
+  if (!myName){ $('home-error').textContent = 'กรอกชื่อก่อนเริ่มเกม'; return; }
+  if (!code){ $('home-error').textContent = 'กรอกรหัสห้อง'; return; }
   if (!myUid) await waitForAuth();
 
   const snap = await db.ref('rooms/' + code).get();
-  if (!snap.exists()){ $('home-error').textContent = 'ไม่พบห้องรหัสนี้'; return; }
+  if (!snap.exists()){ $('home-error').textContent = 'ไม่พบห้องนี้'; return; }
   const room = snap.val();
-  if (room.status !== 'lobby'){ $('home-error').textContent = 'เกมนี้เริ่มไปแล้ว'; return; }
+  if (room.status !== 'lobby'){ $('home-error').textContent = 'ห้องนี้เริ่มเกมไปแล้ว'; return; }
 
   const playersSnap = await db.ref(`rooms/${code}/players`).get();
   const players = playersSnap.val() || {};
-  if (Object.keys(players).length >= MAX_PLAYERS){ $('home-error').textContent = 'ห้องเต็มแล้ว (สูงสุด 10 คน)'; return; }
+  if (Object.keys(players).length >= MAX_PLAYERS){ $('home-error').textContent = `ห้องเต็มแล้ว (สูงสุด ${MAX_PLAYERS} คน)`; return; }
 
   await db.ref(`rooms/${code}/players/${myUid}`).set({ name: myName, lives: room.startingLives || 3, alive: true, connected: true, joinedAt: Date.now() });
   db.ref(`rooms/${code}/players/${myUid}/connected`).onDisconnect().set(false);
@@ -152,8 +152,8 @@ function onRoomUpdate(room){
     showScreen('screen-over');
     const winner = room.players ? room.players[room.winnerUid] : null;
     $('over-text').innerHTML = winner
-      ? `👑 ผู้รอดชีวิตคนสุดท้าย: <strong style="color:var(--primary)">${escapeHtml(winner.name)}</strong>`
-      : 'เกมจบแล้ว';
+      ? `👑 ผู้ชนะ: <strong style="color:var(--gold)">${escapeHtml(winner.name)}</strong>`
+      : 'จบเกม';
     renderRematch(room);
     if (isHost) hostWatchRematch();
   }
@@ -176,7 +176,7 @@ function renderLobby(room){
   $('btn-start').disabled = !(isHost && count >= 2 && !tooMany);
   $('btn-start').textContent = isHost
     ? (tooMany ? `ผู้เล่นเกิน (สูงสุด ${MAX_STARTABLE_PLAYERS} คน)` : 'เริ่มเกม')
-    : `เริ่มเกม (ต้องมี 2-${MAX_STARTABLE_PLAYERS} คน)`;
+    : `รอ 2-${MAX_STARTABLE_PLAYERS} คน`;
   $('lives-setting').style.display = isHost ? 'flex' : 'none';
   $('input-lives').value = room.startingLives || 3;
   $('lobby-wait').style.display = isHost ? 'none' : 'block';
@@ -196,7 +196,7 @@ $('btn-start').addEventListener('click', async () => {
   const uids = Object.keys(players);
   if (uids.length < 2) return;
   if (uids.length > MAX_STARTABLE_PLAYERS){
-    toast(`ไพ่ไม่พอ! สำรับมี ${DECK_SIZE} ใบ (คนละ ${HAND_SIZE} ใบ) เล่นได้สูงสุด ${MAX_STARTABLE_PLAYERS} คน`);
+    toast(`เล่นได้สูงสุด ${MAX_STARTABLE_PLAYERS} คน (สำรับมี ${DECK_SIZE} ใบ)`);
     return;
   }
   const lives = roomCache.startingLives || 3;
@@ -220,7 +220,7 @@ $('btn-start').addEventListener('click', async () => {
   updates[`rooms/${roomCode}/hasDrawnThisTurn`] = false;
   uids.forEach(uid => { updates[`rooms/${roomCode}/players/${uid}/lives`] = lives; updates[`rooms/${roomCode}/players/${uid}/alive`] = true; });
   updates[`rooms/${roomCode}/hands`] = hands;
-  updates[`rooms/${roomCode}/log`] = { [Date.now()]: { text: `🎮 เกมเริ่ม! สำรับ J/Q/K อย่างละ ${RANK_COUNT_PER_RANK} + 🃏 โจ๊กเกอร์ ${JOKER_COUNT} (รวม ${DECK_SIZE} ใบ) · แจกคนละ ${HAND_SIZE} ใบ เหลือ ${drawPile.length} ใบในกองจั่ว`, type:'info', ts: Date.now() } };
+  updates[`rooms/${roomCode}/log`] = { [Date.now()]: { text: `🎮 เริ่มเกม! สำรับ J·Q·K อย่างละ ${RANK_COUNT_PER_RANK} + 🃏 โจ๊กเกอร์ ${JOKER_COUNT} ใบ · แจกคนละ ${HAND_SIZE} ใบ`, type:'info', ts: Date.now() } };
 
   await db.ref().update(updates);
 });
@@ -278,7 +278,7 @@ async function restartGame(uids){
   const room = snap.val();
   if (!room || room.status !== 'ended') return; // กันไม่ให้รันซ้ำ
   if (uids.length > MAX_STARTABLE_PLAYERS){
-    toast(`ไพ่ไม่พอสำหรับผู้เล่นเกิน ${MAX_STARTABLE_PLAYERS} คน เริ่มเกมใหม่ไม่ได้`);
+    toast(`เล่นได้สูงสุด ${MAX_STARTABLE_PLAYERS} คน เริ่มเกมใหม่ไม่ได้`);
     return;
   }
 
@@ -305,7 +305,7 @@ async function restartGame(uids){
   updates[`rooms/${roomCode}/hasDrawnThisTurn`] = false;
   uids.forEach(uid => { updates[`rooms/${roomCode}/players/${uid}/lives`] = lives; updates[`rooms/${roomCode}/players/${uid}/alive`] = true; });
   updates[`rooms/${roomCode}/hands`] = hands;
-  updates[`rooms/${roomCode}/log`] = { [Date.now()]: { text: `🔄 เริ่มเกมใหม่! สำรับ J/Q/K อย่างละ ${RANK_COUNT_PER_RANK} + 🃏 โจ๊กเกอร์ ${JOKER_COUNT} (รวม ${DECK_SIZE} ใบ) · แจกคนละ ${HAND_SIZE} ใบ เหลือ ${drawPile.length} ใบในกองจั่ว`, type:'info', ts: Date.now() } };
+  updates[`rooms/${roomCode}/log`] = { [Date.now()]: { text: `🔄 เริ่มเกมใหม่! สำรับ J·Q·K อย่างละ ${RANK_COUNT_PER_RANK} + 🃏 โจ๊กเกอร์ ${JOKER_COUNT} ใบ · แจกคนละ ${HAND_SIZE} ใบ`, type:'info', ts: Date.now() } };
 
   await db.ref().update(updates);
 }
@@ -402,24 +402,24 @@ function renderGame(room){
 
   // center card + pile
   $('center-card').textContent = room.centerRank !== undefined ? RANKS[room.centerRank] : '?';
-  $('center-total').textContent = ''; // ไม่บอกจำนวนไพ่ที่ตรงระหว่างเล่น จะบอกก็ต่อเมื่อเปิดไพ่พิสูจน์เท่านั้น (ดู renderReveal)
+  $('center-total').textContent = ''; // ไม่บอกจำนวนไพ่ที่ตรงระหว่างเล่น จะบอกก็ต่อเมื่อเปิดไพ่เท่านั้น (ดู renderReveal)
   $('active-set-info').textContent =
-    `สำรับ: ${ACTIVE_RANKS.map(r => RANKS[r]).join(', ')} อย่างละ ${RANK_COUNT_PER_RANK} ใบ + 🃏 โจ๊กเกอร์ ${JOKER_COUNT} ใบ (รวม ${DECK_SIZE} ใบ)`;
+    `สำรับ J·Q·K ×${RANK_COUNT_PER_RANK} + 🃏×${JOKER_COUNT} · รวม ${DECK_SIZE} ใบ`;
   const pile = room.pile;
-  $('pile-info').textContent = pile ? `${pile.ownerName} เล่นไปแล้ว ${pile.count} ใบ (ปิดหน้า)` : 'ยังไม่มีใครเล่นไพ่ในรอบนี้';
+  $('pile-info').textContent = pile ? `${pile.ownerName} ลงไพ่ ${pile.count} ใบ (คว่ำ)` : 'ยังไม่มีใครลงไพ่';
 
   // draw pile
   const drawPile = room.drawPile || [];
   $('draw-remaining').textContent = drawPile.length;
   $('draw-info').textContent = drawPile.length > 0
-    ? `เหลือไพ่ในกองจั่ว ${drawPile.length} ใบ`
-    : 'กองจั่วหมดแล้ว';
+    ? `เหลือ ${drawPile.length} ใบ`
+    : 'หมดกอง';
 
   // status banner
   const curPlayer = players[curUid];
   $('status-banner').textContent = room.status === 'playing'
-    ? (myTurn ? 'ตาของคุณ! เลือกไพ่ที่จะเล่น หรือกดโป้' : `รอ ${curPlayer ? curPlayer.name : '...'} ตัดสินใจ`)
-    : (room.status === 'revealing' ? 'กำลังเปิดไพ่พิสูจน์...' : '');
+    ? (myTurn ? 'ตาคุณ — ลงไพ่ หรือจับโป้' : `รอ ${curPlayer ? curPlayer.name : '...'} ตัดสินใจ`)
+    : (room.status === 'revealing' ? 'กำลังเปิดไพ่...' : '');
 
   // reveal box
   if (room.status === 'revealing' && room.challengeReveal){
@@ -437,7 +437,6 @@ function renderGame(room){
   if (showActions){
     $('btn-liar').disabled = !myTurn || !pile;
     $('btn-draw').disabled = !myTurn || !!room.hasDrawnThisTurn || drawPile.length === 0;
-    $('btn-skip').disabled = !myTurn;
     updatePlayButtonState();
   }
 
@@ -457,7 +456,7 @@ function renderReveal(room){
   });
   $('reveal-result').textContent = ch.resultText || '';
   $('center-total').textContent = room.centerRankTotal !== undefined
-    ? `ตอนแจกไพ่รอบนี้ ทั้งเกม (มือทุกคน + กองจั่ว) มีไพ่ที่นับว่าตรงกับ ${RANKS[room.centerRank]} อยู่ ${room.centerRankTotal} ใบ (รวมโจ๊กเกอร์)`
+    ? `รอบนี้ทั้งเกมมีไพ่ที่ตรงกับ ${RANKS[room.centerRank]} อยู่ ${room.centerRankTotal} ใบ (รวมโจ๊กเกอร์)`
     : '';
 }
 
@@ -468,7 +467,7 @@ function renderMyHand(){
     const c = document.createElement('div');
     c.className = 'hand-card' + (selectedIdx.includes(i) ? ' selected' : '') + (v === JOKER ? ' wild' : '');
     c.textContent = cardLabel(v);
-    if (v === JOKER) c.title = 'โจ๊กเกอร์ — นับเป็นไพ่อันดับไหนก็ได้';
+    if (v === JOKER) c.title = 'โจ๊กเกอร์ — ตรงกับไพ่เป้าหมายเสมอ';
     c.addEventListener('click', () => toggleSelect(i));
     el.appendChild(c);
   });
@@ -523,10 +522,6 @@ $('btn-draw').addEventListener('click', () => {
   db.ref(`rooms/${roomCode}/pendingAction`).set({ type:'draw', uid: myUid, ts: Date.now() });
 });
 
-$('btn-skip').addEventListener('click', () => {
-  db.ref(`rooms/${roomCode}/pendingAction`).set({ type:'skip', uid: myUid, ts: Date.now() });
-});
-
 /* ------------------------------ HOST REFEREE LOGIC ------------------------------ */
 
 function hostWatchPendingAction(){
@@ -573,7 +568,7 @@ async function processPendingAction(action){
     updates[`rooms/${roomCode}/currentTurnIndex`] = nextIndex;
     updates[`rooms/${roomCode}/pendingAction`] = null;
     updates[`rooms/${roomCode}/hasDrawnThisTurn`] = false; // ตาถัดไป จั่วได้ใหม่อีกครั้ง
-    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `${p.name} เล่นไพ่ไป ${playedRanks.length} ใบ (ปิดหน้า)`, type:'info', ts: Date.now() };
+    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `${p.name} ลงไพ่ ${playedRanks.length} ใบ (คว่ำ)`, type:'info', ts: Date.now() };
     await db.ref().update(updates);
   }
 
@@ -592,20 +587,7 @@ async function processPendingAction(action){
     updates[`rooms/${roomCode}/drawPile`] = newDrawPile;
     updates[`rooms/${roomCode}/hasDrawnThisTurn`] = true;
     updates[`rooms/${roomCode}/pendingAction`] = null;
-    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `${p.name} จั่วไพ่จากกองกลาง 1 ใบ (ปิดหน้า)`, type:'info', ts: Date.now() };
-    await db.ref().update(updates);
-  }
-
-  // ข้ามตา: แค่ส่งตาต่อให้คนถัดไป ไม่แตะไพ่ส่วนกลาง / กองไพ่ล่าสุด / กองจั่วเลย
-  if (action.type === 'skip'){
-    const p = room.players[action.uid];
-    const nextIndex = nextAliveIndex(order, room.currentTurnIndex, room.players);
-
-    const updates = {};
-    updates[`rooms/${roomCode}/currentTurnIndex`] = nextIndex;
-    updates[`rooms/${roomCode}/pendingAction`] = null;
-    updates[`rooms/${roomCode}/hasDrawnThisTurn`] = false; // ตาถัดไป จั่วได้ใหม่อีกครั้ง
-    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `${p.name} ข้ามตา (ไพ่ส่วนกลางเหมือนเดิม)`, type:'info', ts: Date.now() };
+    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `${p.name} จั่วไพ่ 1 ใบ`, type:'info', ts: Date.now() };
     await db.ref().update(updates);
   }
 
@@ -623,8 +605,8 @@ async function processPendingAction(action){
     const eliminated = newLives === 0;
 
     const resultText = allMatch
-      ? `เปิดไพ่: ตรงไพ่ส่วนกลางจริงทุกใบ! ${caller.name} โป้พลาด เสียชีวิต 1 ดวง`
-      : `เปิดไพ่: มีไพ่ไม่ตรง! ${secret.ownerName} โป้จริง เสียชีวิต 1 ดวง`;
+      ? `ไพ่ตรงทุกใบ! ${caller.name} จับโป้พลาด เสียไป 1 ชีวิต`
+      : `มีไพ่ไม่ตรง! ${secret.ownerName} โป้จริง เสียไป 1 ชีวิต`;
 
     const updates = {};
     updates[`rooms/${roomCode}/status`] = 'revealing';
@@ -632,9 +614,9 @@ async function processPendingAction(action){
     updates[`rooms/${roomCode}/players/${loserUid}/lives`] = newLives;
     updates[`rooms/${roomCode}/players/${loserUid}/alive`] = !eliminated;
     updates[`rooms/${roomCode}/pendingAction`] = null;
-    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `🔫 ${caller.name} กดโป้ใส่ ${secret.ownerName}! ${resultText}`, type:'danger', ts: Date.now() };
+    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `🔫 ${caller.name} จับโป้ ${secret.ownerName}! ${resultText}`, type:'danger', ts: Date.now() };
     if (eliminated){
-      updates[`rooms/${roomCode}/log/${Date.now()+1}`] = { text: `💀 ${loser.name} หมดชีวิต ออกจากเกม!`, type:'danger', ts: Date.now()+1 };
+      updates[`rooms/${roomCode}/log/${Date.now()+1}`] = { text: `💀 ${loser.name} หมดชีวิต ตกรอบ!`, type:'danger', ts: Date.now()+1 };
     }
     await db.ref().update(updates);
 
@@ -654,7 +636,7 @@ async function finishRound(loserUid, eliminated){
   if (aliveUids.length <= 1){
     updates[`rooms/${roomCode}/status`] = 'ended';
     updates[`rooms/${roomCode}/winnerUid`] = aliveUids[0] || null;
-    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `🏆 ${aliveUids[0] ? room.players[aliveUids[0]].name : 'ไม่มีใคร'} คือผู้รอดชีวิตคนสุดท้าย!`, type:'win', ts: Date.now() };
+    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `🏆 ${aliveUids[0] ? room.players[aliveUids[0]].name : 'ไม่มีใคร'} คือผู้ชนะ!`, type:'win', ts: Date.now() };
   } else {
     const { hands, drawPile, centerRank, total, order: cycleOrder, pos } =
       dealNewRound(aliveUids, room.cycleOrder, room.cyclePos);

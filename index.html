@@ -2,21 +2,26 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ไพ่โป้ | Liar's Cards</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#15111a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="description" content="ไพ่โป้ — เกมไพ่บลัฟฟ์หลายผู้เล่นแบบเรียลไทม์ ลงไพ่คว่ำ กล้าโกหก หรือจับโป้ให้แม่น">
+<title>ไพ่LaosLaos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chonburi&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<style>
-  .hand-card.wild, .mini-card.wild { border-color:#d4a017; box-shadow:0 0 0 2px rgba(212,160,23,.35) inset; }
-  .hand-card.wild::after, .mini-card.wild::after { content:"WILD"; display:block; font-size:9px; letter-spacing:.05em; opacity:.7; }
-</style>
 </head>
 <body>
 
 <!-- ================= หน้าแรก ================= -->
 <section id="screen-home" class="screen active">
   <div class="home-wrap">
+    <p class="eyebrow">LIAR'S TABLE</p>
     <h1 class="app-title">ไพ่ฬาวๆ</h1>
-    <p class="app-sub">เกมฬาวๆไพ่ฬาวๆคนเล่นฬาวๆ</p>
+    <p class="app-sub">โต๊ะไพ่ที่ไว้ใจใครไม่ได้</p>
 
     <div class="card">
       <label class="field">
@@ -37,10 +42,6 @@
       <p id="home-error" class="error-text"></p>
     </div>
 
-    <details class="setup-help">
-      <summary>ตั้งค่า Firebase (ทำครั้งเดียว)</summary>
-      <p>แก้ไฟล์ <code>firebase-config.js</code> ให้เป็นของโปรเจกต์คุณ ดูขั้นตอนใน <code>README.md</code></p>
-    </details>
   </div>
 </section>
 
@@ -60,7 +61,7 @@
 
       <div class="lobby-settings">
         <label class="field field-row" id="lives-setting">
-          <span>จำนวนชีวิต</span>
+          <span>ชีวิตเริ่มต้น</span>
           <select id="input-lives">
             <option value="2">2</option>
             <option value="3" selected>3</option>
@@ -69,8 +70,8 @@
         </label>
       </div>
 
-      <button id="btn-start" class="btn btn-primary btn-block" disabled>เริ่มเกม (ต้องมี ≥ 2 คน)</button>
-      <p id="lobby-wait" class="muted center">รอเจ้าของห้องกดเริ่มเกม...</p>
+      <button id="btn-start" class="btn btn-primary btn-block" disabled>เริ่มเกม</button>
+      <p id="lobby-wait" class="muted center">รอเจ้าของห้องเริ่มเกม...</p>
       <button id="btn-leave-lobby" class="btn btn-text btn-block">ออกจากห้อง</button>
     </div>
   </div>
@@ -86,46 +87,49 @@
       <button id="btn-leave-game" class="btn btn-text btn-sm">ออก</button>
     </div>
 
-    <ul id="game-players" class="player-list compact"></ul>
+    <ul id="game-players" class="player-list rail"></ul>
 
     <div class="center-area">
       <div class="center-card-box">
-        <p class="label-sm">ไพ่ส่วนกลาง (ทุกคนต้องอ้างว่าไพ่ที่เล่นตรงกับใบนี้)</p>
+        <p class="label-sm">ไพ่เป้าหมาย</p>
         <div id="center-card" class="big-card accent">?</div>
-        <p id="active-set-info" class="muted" style="font-size:12px;margin-top:2px"></p>
+        <p class="hint-text">ไพ่ที่ทุกคนต้องอ้างว่าลงตรง</p>
+        <p id="active-set-info" class="deck-chip"></p>
       </div>
-      <div class="pile-box">
-        <p class="label-sm">กองไพ่ล่าสุด</p>
-        <p id="pile-info" class="pile-info">ยังไม่มีใครเล่นไพ่</p>
-      </div>
-      <div class="pile-box">
-        <p class="label-sm">กองจั่ว</p>
-        <p id="draw-info" class="pile-info">เหลือไพ่ในกองจั่ว 0 ใบ</p>
+      <div class="stat-row">
+        <div class="pile-box">
+          <p class="label-sm">กองล่าสุด</p>
+          <p id="pile-info" class="pile-info">ยังไม่มีใครลงไพ่</p>
+        </div>
+        <div class="pile-box">
+          <p class="label-sm">กองจั่ว</p>
+          <p id="draw-info" class="pile-info">เหลือ 0 ใบ</p>
+        </div>
       </div>
     </div>
 
     <div id="status-banner" class="status-banner"></div>
 
     <div id="reveal-box" class="reveal-box hidden">
-      <p class="label-sm">เปิดไพ่พิสูจน์!</p>
+      <p class="label-sm">เปิดไพ่!</p>
       <div id="reveal-cards" class="reveal-cards"></div>
       <p id="reveal-result" class="reveal-result"></p>
       <p id="center-total" class="center-total"></p>
     </div>
 
     <div class="my-hand-box">
-      <p class="label-sm">ไพ่ในมือคุณ (แตะเพื่อเลือก)</p>
+      <p class="label-sm">มือไพ่ของคุณ <span class="hint-inline">แตะเพื่อเลือก</span></p>
       <div id="my-hand" class="hand-grid"></div>
     </div>
 
     <div id="action-panel" class="action-row hidden">
-      <button id="btn-draw" class="btn btn-outline" disabled>🂠 จั่วไพ่ (<span id="draw-remaining">0</span>)</button>
-      <button id="btn-play" class="btn btn-primary" disabled>เล่นไพ่ที่เลือก (<span id="selected-count">0</span>)</button>
-      <button id="btn-liar" class="btn btn-danger" disabled>🔫 โป้! (Liar)</button>
+      <button id="btn-draw" class="btn btn-outline" disabled>🂠 จั่วไพ่ <span id="draw-remaining">0</span></button>
+      <button id="btn-play" class="btn btn-primary" disabled>ลงไพ่ <span id="selected-count">0</span></button>
+      <button id="btn-liar" class="btn btn-danger" disabled>🔫 จับโป้</button>
     </div>
 
     <div class="log-card">
-      <p class="label-sm">เหตุการณ์</p>
+      <p class="label-sm">บันทึกเกม</p>
       <ul id="game-log" class="game-log"></ul>
     </div>
   </div>
@@ -136,7 +140,7 @@
   <div class="wrap-narrow center">
     <div class="card center">
       <div class="trophy">🏆</div>
-      <h2>เกมจบแล้ว</h2>
+      <h2>จบเกม</h2>
       <p id="over-text" class="over-text"></p>
 
       <ul id="rematch-list" class="player-list compact" style="text-align:left"></ul>
@@ -155,6 +159,5 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="app.js"></script>
-<script src="style.css"></script>
 </body>
 </html>
