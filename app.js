@@ -605,8 +605,8 @@ async function processPendingAction(action){
     const eliminated = newLives === 0;
 
     const resultText = allMatch
-      ? `ไพ่ตรงทุกใบ! ${caller.name} จับโป้พลาด เสียไป 1 ชีวิต`
-      : `มีไพ่ไม่ตรง! ${secret.ownerName} โป้จริง เสียไป 1 ชีวิต`;
+      ? `ไพ่ตรงทุกใบ! ${caller.name} ยิงพลาด เสียไป 1 ชีวิต`
+      : `มีไพ่ไม่ตรง! ${secret.ownerName} โกหกจริง เสียไป 1 ชีวิต`;
 
     const updates = {};
     updates[`rooms/${roomCode}/status`] = 'revealing';
@@ -614,7 +614,7 @@ async function processPendingAction(action){
     updates[`rooms/${roomCode}/players/${loserUid}/lives`] = newLives;
     updates[`rooms/${roomCode}/players/${loserUid}/alive`] = !eliminated;
     updates[`rooms/${roomCode}/pendingAction`] = null;
-    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `🔫 ${caller.name} จับโป้ ${secret.ownerName}! ${resultText}`, type:'danger', ts: Date.now() };
+    updates[`rooms/${roomCode}/log/${Date.now()}`] = { text: `🔫 ${caller.name} ยิง ${secret.ownerName}! ${resultText}`, type:'danger', ts: Date.now() };
     if (eliminated){
       updates[`rooms/${roomCode}/log/${Date.now()+1}`] = { text: `💀 ${loser.name} หมดชีวิต ตกรอบ!`, type:'danger', ts: Date.now()+1 };
     }
