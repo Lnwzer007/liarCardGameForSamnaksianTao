@@ -418,7 +418,7 @@ function renderGame(room){
   // status banner
   const curPlayer = players[curUid];
   $('status-banner').textContent = room.status === 'playing'
-    ? (myTurn ? 'ตาคุณ — ลงไพ่ หรือจับโป้' : `รอ ${curPlayer ? curPlayer.name : '...'} ตัดสินใจ`)
+    ? (myTurn ? 'ตาคุณ — ลงไพ่ หรือยิงแม่งเลย' : `รอ ${curPlayer ? curPlayer.name : '...'} ตัดสินใจ`)
     : (room.status === 'revealing' ? 'กำลังเปิดไพ่...' : '');
 
   // reveal box
